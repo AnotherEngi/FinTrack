@@ -1,160 +1,407 @@
 import SwiftUI
 import FinTrackCore
 
+extension WorkspacePeriod {
+    var label: String {
+        switch self {
+        case .oneMonth: "1 month"
+        case .threeMonths: "3 months"
+        case .sixMonths: "6 months"
+        case .yearToDate: "YTD"
+        case .pastYear: "Past year"
+        case .custom: "Custom"
+        }
+    }
+}
+
+extension TransactionSortColumn {
+    var label: String {
+        switch self {
+        case .activity: "Activity"
+        case .date: "Date"
+        case .amount: "Amount"
+        case .merchant: "Merchant"
+        case .source: "Source"
+        case .category: "Category"
+        case .tags: "Tags"
+        case .review: "Review"
+        }
+    }
+
+    func width(in tableWidth: CGFloat) -> CGFloat {
+        switch self {
+        case .activity: 44
+        case .date: 80
+        case .amount: 88
+        case .merchant: max(144, tableWidth - 844)
+        case .source: 112
+        case .category, .tags: 128
+        case .review: 164
+        }
+    }
+}
+
 @MainActor
 struct TransactionListView: View {
     @Bindable var ledger: LedgerViewModel
     @State private var editor: EditorDraft?
+    @State private var startDiscussion = false
     @State private var search = ""
-    @State private var period = HistoryPeriod.all
-    @State private var reviewFilter = ReviewFilter.all
-    @State private var from = Calendar.current.date(byAdding: .day, value: -56, to: .now)!
+    @State private var period = WorkspacePeriod.oneMonth
+    @State private var from = Calendar.current.date(byAdding: .month, value: -1, to: .now)!
     @State private var through = Date.now
+    @State private var amalgamate = false
+    @State private var sort = TransactionTableSort()
+    @State private var showExport = false
+    @State private var exportIDs: Set<UUID> = []
+    @State private var pendingRequest: ReviewRequest?
 
-    private enum HistoryPeriod: String, CaseIterable {
-        case all = "All history", eightWeeks = "Last 8 weeks", custom = "Date range"
-    }
-
-    private enum ReviewFilter: String, CaseIterable {
-        case all = "All transactions", unreviewed = "Unreviewed", discussion = "Needs discussion"
-        case approved = "Approved", pending = "Pending", excluded = "Outside spending review"
+    private var range: TransactionDateRange? {
+        guard let today = try? TransactionDate(EditorDraft.dateText(.now)) else { return nil }
+        return try? period.range(through: today,
+            customFrom: TransactionDate(EditorDraft.dateText(from)),
+            customThrough: TransactionDate(EditorDraft.dateText(through)))
     }
 
     private var visibleRecords: [LedgerTransaction] {
-        let end = EditorDraft.dateText(through)
-        let start = EditorDraft.dateText(from)
-        let eightWeeksAgo = EditorDraft.dateText(
-            Calendar.current.date(byAdding: .day, value: -56, to: .now)!)
-        return ledger.records.filter { record in
-            let date = record.draft.date.iso8601
-            let inRange = switch period {
-            case .all: true
-            case .eightWeeks: date >= eightWeeksAgo && date <= EditorDraft.dateText(.now)
-            case .custom: date >= start && date <= end
-            }
-            let matchesReview = switch reviewFilter {
-            case .all: true
-            case .unreviewed: record.approval == .unreviewed
-            case .discussion: record.discussionRequested
-            case .approved: record.approval == .confirmed
-            case .pending: record.draft.postingStatus == .pending
-            case .excluded: record.approval == .notApplicable
-            }
-            return inRange && matchesReview && (search.isEmpty
-                || record.draft.payee.localizedCaseInsensitiveContains(search)
-                || record.draft.notes.localizedCaseInsensitiveContains(search))
-        }
+        guard let range else { return [] }
+        let labels = Dictionary(uniqueKeysWithValues: ledger.catalog.categories.map { ($0.id, $0.label) })
+        let records = LedgerSelection(from: range.from, through: range.through,
+            search: search, categoryLabels: labels).records(in: ledger.records)
+        return sort.records(records, catalog: ledger.catalog, changedIDs: ledger.sessionChanges.recordIDs)
     }
 
     var body: some View {
         NavigationStack {
-            Group {
-                if let failure = ledger.startupFailure {
-                    ContentUnavailableView("Unable to Open FinTrack", systemImage: "externaldrive.badge.exclamationmark",
-                        description: Text("\(failure)\nYour existing files have been preserved."))
+            VStack(spacing: 0) {
+                controls.frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 16).padding(.bottom, 12)
+                if period == .custom {
+                    HStack {
+                        DatePicker("From", selection: $from, displayedComponents: .date)
+                        DatePicker("Through", selection: $through, displayedComponents: .date)
+                    }.padding(.horizontal, 16).padding(.bottom, 10)
+                }
+                if range == nil {
+                    Text("Choose a start date on or before the end date.").foregroundStyle(.red)
+                }
+                if ledger.records.isEmpty {
+                    ContentUnavailableView {
+                        Label("No saved transactions", systemImage: "tablecells")
+                    } description: {
+                        Text("Add a transaction or load invented table examples.")
+                    } actions: { Button("Load Synthetic Table Examples") { ledger.loadTableSamples() } }
+                } else if visibleRecords.isEmpty {
+                    ContentUnavailableView {
+                        Label("No matching transactions", systemImage: "magnifyingglass")
+                    } description: {
+                        Text("Try another search or date range. Existing records are preserved.")
+                    } actions: { Button("Add Current Synthetic Table Examples") { ledger.loadTableSamples() } }
                 } else {
-                    history
+                    GeometryReader { geometry in
+                        let width = max(988, geometry.size.width - 24)
+                        ScrollView([.horizontal, .vertical]) {
+                            LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
+                                if amalgamate {
+                                    tableSection(nil, records: visibleRecords, width: width)
+                                } else {
+                                    tableSection("Not approved", records: visibleRecords.filter { $0.approval != .confirmed }, width: width)
+                                    tableSection("Approved", records: visibleRecords.filter { $0.approval == .confirmed }, width: width)
+                                }
+                            }.frame(width: width).padding(.horizontal, 12)
+                        }
+                    }
                 }
             }
-            .navigationTitle("FinTrack")
+            .background(Color(.systemGroupedBackground))
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
-                    Button("Add Transaction", systemImage: "plus") { editor = .new() }
-                        .disabled(ledger.startupFailure != nil)
+                    Button { exportIDs = Set(visibleRecords.map(\.id)); showExport = true } label: {
+                        Image(systemName: "square.and.arrow.up")
+                    }.accessibilityLabel("Export shown transactions").help("Export shown transactions")
+                        .disabled(visibleRecords.isEmpty)
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    Button { startDiscussion = false; editor = .new() } label: { Image(systemName: "plus") }
+                        .accessibilityLabel("Add transaction").help("Add transaction")
+                }
+                if !ledger.drafts.isEmpty {
+                    ToolbarItem(placement: .primaryAction) {
+                        Menu {
+                            ForEach(ledger.drafts) { draft in
+                                Button(draft.input.payee.isEmpty ? "New transaction draft" : draft.input.payee) {
+                                    startDiscussion = false; editor = draft
+                                }
+                            }
+                        } label: { Image(systemName: "doc.badge.ellipsis") }
+                            .accessibilityLabel("Resume unsaved drafts").help("Resume unsaved drafts")
+                    }
+                }
+                ToolbarItem(placement: .secondaryAction) {
+                    Button("Add Synthetic Table Examples", systemImage: "testtube.2") { ledger.loadTableSamples() }
                 }
             }
             .sheet(item: $editor, onDismiss: { ledger.reload() }) { draft in
-                TransactionEditorView(ledger: ledger, draft: draft) { id in
-                    editor = ledger.nextReviewDraft(after: id, visibleIDs: visibleRecords.map(\.id))
-                }
-                .id(draft.id)
+                // Table details stay on the selected record after a review action.
+                TransactionEditorView(ledger: ledger, draft: draft, startDiscussion: startDiscussion) { _ in }
+                    .id(draft.id)
             }
-            .alert("FinTrack", isPresented: Binding(
-                get: { ledger.message != nil }, set: { if !$0 { ledger.message = nil } })) {
-                    Button("OK") { ledger.message = nil }
-                } message: { Text(ledger.message ?? "") }
+            .sheet(isPresented: $showExport) {
+                ReviewExportView(ledger: ledger, initialIDs: exportIDs, showsDone: true)
+            }
         }
     }
 
-    private var history: some View {
-        List {
-            Section {
-                Label("Synthetic development data only", systemImage: "testtube.2")
-                    .font(.callout).foregroundStyle(.secondary)
-                Picker("History", selection: $period) {
-                    ForEach(HistoryPeriod.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-                }
-                Picker("Review filter", selection: $reviewFilter) {
-                    ForEach(ReviewFilter.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-                }
-                if period == .custom {
-                    DatePicker("From", selection: $from, displayedComponents: .date)
-                    DatePicker("Through", selection: $through, displayedComponents: .date)
-                    if EditorDraft.dateText(from) > EditorDraft.dateText(through) {
-                        Text("Choose a start date before the end date.").foregroundStyle(.red)
-                    }
-                }
+    private var controls: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) {
+                searchField.frame(width: 220)
+                dateButtons
+                Spacer(minLength: 0)
+                amalgamateSwitch
             }
-            if !ledger.records.isEmpty {
-                Section("Shown Spending") {
-                    if let totals = try? SpendingTotals(records: visibleRecords) {
-                        LabeledContent("Posted spending", value: totals.posted.decimalText + " USD")
-                        LabeledContent("Pending spending", value: totals.pending.decimalText + " USD")
-                    } else {
-                        Text("Totals are unavailable for these amounts.").foregroundStyle(.secondary)
-                    }
-                    Text("Includes classified posted/pending purchases and refunds in the current view. Other or unresolved treatments and posting states are excluded.")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-            }
-            if !ledger.drafts.isEmpty {
-                Section("Unsaved Drafts") {
-                    ForEach(ledger.drafts) { draft in
-                        Button { editor = draft } label: {
-                            Label(draft.input.payee.isEmpty ? "New transaction draft" : draft.input.payee,
-                                  systemImage: "square.and.pencil")
-                        }
-                    }
-                }
-            }
-            if ledger.records.isEmpty {
-                Section {
-                    Text("Add a transaction or load eight weeks of invented examples.")
-                    Button("Load Synthetic Examples") { ledger.loadSamples() }
-                }
-            } else if visibleRecords.isEmpty {
-                Text("No transactions match this range or search.").foregroundStyle(.secondary)
-            } else {
-                ForEach(Array(Set(visibleRecords.map { $0.draft.date.iso8601 })).sorted(by: >), id: \.self) { date in
-                    Section(date) {
-                        ForEach(visibleRecords.filter { $0.draft.date.iso8601 == date }) { record in
-                            Button { editor = ledger.editor(for: record) } label: {
-                                HStack {
-                                    Image(systemName: record.discussionRequested ? "bubble.left.and.bubble.right"
-                                        : record.approval == .confirmed ? "checkmark.circle.fill"
-                                        : record.approval == .notApplicable ? "minus.circle" : "circle")
-                                        .accessibilityLabel(record.discussionRequested ? "Needs discussion" : record.approval.label)
-                                    VStack(alignment: .leading) {
-                                        Text(record.draft.payee).foregroundStyle(.primary)
-                                        Text(record.draft.treatment.label + " · " + record.draft.postingStatus.label
-                                             + " · " + record.approval.label)
-                                            .font(.caption).foregroundStyle(.secondary)
-                                        if let category = ledger.catalog.category(id: record.draft.categoryID) {
-                                            Text(category.label).font(.caption).foregroundStyle(.secondary)
-                                        }
-                                    }
-                                    Spacer()
-                                    Text(record.draft.amount.decimalText + " USD")
-                                        .monospacedDigit().foregroundStyle(.primary)
-                                }
-                                .accessibilityElement(children: .combine)
-                            }
-                        }
-                    }
+            VStack(spacing: 10) {
+                searchField
+                HStack(spacing: 12) {
+                    ScrollView(.horizontal, showsIndicators: false) { dateButtons }.frame(height: 44)
+                    amalgamateSwitch
                 }
             }
         }
-        .searchable(text: $search, prompt: "Search payees and notes")
-        .refreshable { ledger.reload() }
+    }
+
+    private var searchField: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+            TextField("Search transactions", text: $search)
+                .textInputAutocapitalization(.never).autocorrectionDisabled()
+            if !search.isEmpty {
+                Button { search = "" } label: { Image(systemName: "xmark.circle.fill") }
+                    .accessibilityLabel("Clear search").foregroundStyle(.secondary)
+            }
+        }.padding(10).background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    private var dateButtons: some View {
+        HStack(spacing: 4) {
+            ForEach(WorkspacePeriod.allCases, id: \.self) { value in
+                Button {
+                    if value == .custom, let range {
+                        from = Self.calendarDate(range.from)
+                        through = Self.calendarDate(range.through)
+                    }
+                    period = value
+                } label: {
+                    Text(value.label).font(.caption).fixedSize().padding(.horizontal, 10).frame(minHeight: 44)
+                        .background(period == value ? Color.accentColor.opacity(0.14) : Color(.secondarySystemGroupedBackground),
+                            in: RoundedRectangle(cornerRadius: 8))
+                }.buttonStyle(.plain).foregroundStyle(period == value ? Color.accentColor : Color.primary)
+                    .accessibilityAddTraits(period == value ? [.isSelected] : [])
+            }
+        }
+    }
+
+    private var amalgamateSwitch: some View {
+        Toggle("Amalgamate", isOn: $amalgamate).toggleStyle(.switch).fixedSize()
+            .help("Combine approved and non-approved transactions")
+    }
+
+    private static func calendarDate(_ value: TransactionDate) -> Date {
+        let parts = value.iso8601.split(separator: "-").map { Int($0)! }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+        return calendar.date(from: DateComponents(year: parts[0], month: parts[1], day: parts[2], hour: 12))!
+    }
+
+    private func tableSection(_ title: String?, records: [LedgerTransaction], width: CGFloat) -> some View {
+        Section {
+            if records.isEmpty { Text("No matching transactions.").foregroundStyle(.secondary).padding() }
+            ForEach(records) { record in
+                TransactionTableRow(record: record, catalog: ledger.catalog, width: width,
+                    changed: ledger.sessionChanges.recordIDs.contains(record.id),
+                    hasDraft: ledger.drafts.contains { $0.id == record.id },
+                    onEdit: { discuss in startDiscussion = discuss; editor = ledger.editor(for: record) },
+                    onReview: { action in perform(action, record: record) })
+                Divider()
+            }
+        } header: {
+            VStack(alignment: .leading, spacing: 0) {
+                if let title { Text(title).font(.subheadline.weight(.medium)).padding(.vertical, 10) }
+                HStack(spacing: 0) {
+                    ForEach(TransactionSortColumn.allCases, id: \.self) { column in
+                        Button {
+                            sort = TransactionTableSort(column: column,
+                                ascending: sort.column == column ? !sort.ascending : column != .date && column != .amount)
+                        } label: {
+                            HStack(spacing: 3) {
+                                if column == .activity { Image(systemName: "circle.dotted") }
+                                else {
+                                    Text(column.label)
+                                    Image(systemName: sort.column == column
+                                        ? sort.ascending ? "arrow.up" : "arrow.down" : "arrow.up.arrow.down")
+                                        .imageScale(.small)
+                                }
+                            }.font(.caption).foregroundStyle(sort.column == column ? Color.accentColor : Color.secondary)
+                                .frame(width: column.width(in: width), height: 44,
+                                    alignment: column == .activity ? .center : column == .amount ? .trailing : .leading)
+                        }.buttonStyle(.plain)
+                            .accessibilityLabel("Sort by \(column.label)")
+                            .accessibilityValue(sort.column == column ? sort.ascending ? "Ascending" : "Descending" : "Not selected")
+                            .help("Sort by \(column.label)")
+                    }
+                }
+            }.background(Color(.systemGroupedBackground))
+        }
+    }
+
+    private func perform(_ action: ReviewAction, record: LedgerTransaction) {
+        let request: ReviewRequest
+        if let pendingRequest, pendingRequest.transactionID == record.id,
+           pendingRequest.action == action, pendingRequest.expectedRevision == record.revision {
+            request = pendingRequest
+        } else {
+            request = ReviewRequest(transactionID: record.id, expectedRevision: record.revision, action: action)
+            pendingRequest = request
+        }
+        do { _ = try ledger.perform(request); pendingRequest = nil }
+        catch { ledger.message = error.localizedDescription }
+    }
+}
+
+@MainActor
+private struct TransactionTableRow: View {
+    @Environment(\.colorScheme) private var colorScheme
+    let record: LedgerTransaction
+    let catalog: ReviewCatalog
+    let width: CGFloat
+    let changed: Bool
+    let hasDraft: Bool
+    let onEdit: (Bool) -> Void
+    let onReview: (ReviewAction) -> Void
+
+    private var approvalAction: ReviewAction { record.approval == .confirmed ? .reopen : .approve }
+    private var approvalReason: String? {
+        hasDraft ? "Finish or discard this transaction's unsaved draft first."
+            : record.reviewBlockReason(for: approvalAction, catalog: catalog)
+    }
+    private var activityLabel: String {
+        var labels: [String] = []
+        if changed { labels.append("Changed this session") }
+        if hasDraft { labels.append("Unsaved draft") }
+        if record.discussionRequested {
+            labels.append(record.discussionProgress == .reviewingInChatGPT
+                ? "Reviewing in ChatGPT, marked by you" : "Discussion waiting for export")
+        }
+        return labels.joined(separator: "; ")
+    }
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 0) {
+            activity.frame(width: TransactionSortColumn.activity.width(in: width))
+            date.frame(width: TransactionSortColumn.date.width(in: width), alignment: .leading)
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(record.draft.amount.decimalText).monospacedDigit().font(.subheadline)
+                if record.draft.postingStatus == .pending { Text("Pending").font(.caption2).foregroundStyle(.secondary) }
+            }.frame(width: TransactionSortColumn.amount.width(in: width), alignment: .trailing)
+            pill(record.draft.payee, origin: record.classificationProvenance.category)
+                .frame(width: TransactionSortColumn.merchant.width(in: width), alignment: .leading)
+            Text(record.draft.source?.label ?? "—").font(.subheadline).lineLimit(3)
+                .help(record.draft.source?.label ?? "Source unavailable on this record")
+                .accessibilityLabel(record.draft.source?.label ?? "Source unavailable")
+                .frame(width: TransactionSortColumn.source.width(in: width), alignment: .leading)
+            Text(catalog.category(id: record.draft.categoryID)?.label ?? record.draft.categoryID ?? "—")
+                .font(.subheadline).lineLimit(3)
+                .frame(width: TransactionSortColumn.category.width(in: width), alignment: .leading)
+            VStack(alignment: .leading, spacing: 4) {
+                if record.draft.tags.isEmpty { Text("—").foregroundStyle(.secondary) }
+                ForEach(record.draft.tags, id: \.self) { tag in
+                    pill(tag, origin: record.classificationProvenance.tags[tag] ?? .unknown)
+                }
+            }.frame(width: TransactionSortColumn.tags.width(in: width), alignment: .leading)
+            actions.frame(width: TransactionSortColumn.review.width(in: width), alignment: .leading)
+        }
+        .padding(.vertical, 12).frame(minHeight: 68)
+        .background(Color(.secondarySystemGroupedBackground))
+        .accessibilityElement(children: .contain)
+    }
+
+    private var date: some View {
+        let parts = record.draft.date.iso8601.split(separator: "-").map { Int($0)! }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let date = calendar.date(from: DateComponents(year: parts[0], month: parts[1], day: parts[2]))!
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.timeZone = calendar.timeZone
+        formatter.setLocalizedDateFormatFromTemplate("MMMd")
+        return VStack(alignment: .leading, spacing: 2) {
+            Text(formatter.string(from: date)).font(.caption)
+            if record.draft.date.iso8601.prefix(4) != EditorDraft.dateText(.now).prefix(4) {
+                Text(String(parts[0])).font(.caption2).foregroundStyle(.secondary)
+            }
+        }.accessibilityLabel(record.draft.date.iso8601)
+    }
+
+    private var activity: some View {
+        Group {
+            if activityLabel.isEmpty { Text("—").foregroundStyle(.secondary) }
+            else {
+                Button { onEdit(false) } label: {
+                    HStack(spacing: 2) {
+                        if changed { Image(systemName: "pencil").foregroundStyle(statusColor(.user)) }
+                        if hasDraft { Image(systemName: "doc.badge.ellipsis").foregroundStyle(.secondary) }
+                        if record.discussionRequested {
+                            Image(systemName: record.discussionProgress == .reviewingInChatGPT ? "ellipsis.bubble" : "bubble.left")
+                                .foregroundStyle(statusColor(record.discussionProgress == .reviewingInChatGPT ? .user : .assistant))
+                        }
+                    }.font(.system(size: 11)).frame(width: 44, height: 44)
+                }.buttonStyle(.plain).accessibilityLabel(activityLabel).help(activityLabel)
+            }
+        }
+    }
+
+    private func pill(_ text: String, origin: ValueOrigin) -> some View {
+        let approved = record.approval == .confirmed
+        let color = statusColor(origin, approved: approved)
+        let known = approved || origin != .unknown
+        let status = approved ? "Approved" : origin == .assistant ? "AI suggestion, not approved"
+            : origin == .user ? "Your edit, not approved" : "Origin unknown"
+        return Text(text).font(.caption).lineLimit(3).padding(.horizontal, 8).padding(.vertical, 5)
+            .foregroundStyle(known ? color : .primary)
+            .background(known ? color.opacity(0.14) : Color.clear, in: Capsule())
+            .padding(.horizontal, 4)
+            .accessibilityLabel(text + ", " + status).help(text + " — " + status)
+    }
+
+    private func statusColor(_ origin: ValueOrigin, approved: Bool = false) -> Color {
+        let dark = colorScheme == .dark
+        if approved { return dark ? Color(red: 0.62, green: 0.88, blue: 0.75) : Color(red: 0.14, green: 0.42, blue: 0.31) }
+        switch origin {
+        case .assistant: return dark ? Color(red: 1, green: 0.81, blue: 0.58) : Color(red: 0.60, green: 0.33, blue: 0.08)
+        case .user: return dark ? Color(red: 0.63, green: 0.78, blue: 1) : Color(red: 0.08, green: 0.35, blue: 0.68)
+        case .unknown: return .secondary
+        }
+    }
+
+    private var actions: some View {
+        HStack(spacing: 4) {
+            actionButton(record.approval == .notApplicable ? "minus.circle"
+                : record.approval == .confirmed ? "arrow.uturn.backward" : "checkmark",
+                label: approvalAction.label, help: approvalReason ?? approvalAction.label,
+                disabled: approvalReason != nil, color: statusColor(.unknown, approved: true)) { onReview(approvalAction) }
+            actionButton("bubble.left.and.bubble.right", label: "Discuss", help: "Discuss",
+                disabled: record.draft.treatment.excludedFromReview) { onEdit(true) }
+            actionButton("square.and.pencil", label: "Edit", help: "Edit") { onEdit(false) }
+        }
+    }
+
+    private func actionButton(_ icon: String, label: String, help: String,
+                              disabled: Bool = false, color: Color = .primary,
+                              action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon).font(.subheadline).foregroundStyle(color).frame(width: 44, height: 44)
+                .background(Color(.tertiarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 8))
+        }.buttonStyle(.plain).disabled(disabled).opacity(disabled ? 0.4 : 1)
+            .accessibilityLabel(label + " " + record.draft.payee).help(help)
     }
 }

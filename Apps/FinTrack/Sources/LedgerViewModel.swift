@@ -12,6 +12,7 @@ final class LedgerViewModel {
     private(set) var records: [LedgerTransaction] = []
     private(set) var drafts: [EditorDraft] = []
     private(set) var startupFailure: String?
+    private(set) var sessionChanges = SessionChanges()
     var message: String?
 
     init() {
@@ -48,6 +49,16 @@ final class LedgerViewModel {
         } catch { message = error.localizedDescription }
     }
 
+    func loadTableSamples() {
+        do {
+            guard let repository else { throw LedgerError.recordNotFound }
+            let count = try repository.addSyntheticTableExamples(asOf: TransactionDate(EditorDraft.dateText(.now)))
+            reload()
+            message = count == 0 ? "Table examples already exist. Your edits were preserved."
+                : "Added \(count) fictional table examples. Existing records were preserved."
+        } catch { message = error.localizedDescription }
+    }
+
     func storeDraft(_ draft: EditorDraft) throws {
         guard let draftStore else { throw LedgerError.recordNotFound }
         try draftStore.write(draft)
@@ -56,13 +67,16 @@ final class LedgerViewModel {
     func commitDraft(_ draft: EditorDraft) throws -> EditorDraft {
         guard let repository, let draftStore else { throw LedgerError.recordNotFound }
         let value = try draft.input.value()
+        let before = records.first { $0.id == draft.id }
         let saved: LedgerTransaction
         if let revision = draft.expectedRevision {
             saved = try repository.update(id: draft.id, expectedRevision: revision, draft: value)
         } else {
-            saved = try LedgerTransaction(id: draft.id, createdAt: draft.createdAt, updatedAt: .now, draft: value)
+            saved = try LedgerTransaction(id: draft.id, createdAt: draft.createdAt, updatedAt: .now,
+                draft: value, classificationProvenance: .manual(value))
             try repository.insert(saved)
         }
+        sessionChanges.register(before: before, after: saved)
         var committed = draft
         committed.expectedRevision = saved.revision
         do { try draftStore.remove(id: draft.id) }
@@ -84,7 +98,12 @@ final class LedgerViewModel {
 
     func perform(_ request: ReviewRequest) throws -> LedgerTransaction {
         guard let repository else { throw LedgerError.recordNotFound }
+        guard !drafts.contains(where: { $0.id == request.transactionID }) else {
+            throw LedgerError.unfinishedDraft
+        }
+        let before = records.first { $0.id == request.transactionID }
         let record = try repository.perform(request)
+        sessionChanges.register(before: before, after: record)
         reload()
         return record
     }

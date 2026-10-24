@@ -34,8 +34,8 @@ review-period label. Its later assertions did not run in the reported baseline.
 The check script also uses URL.pathname for child-process paths, which needs a
 Windows portability review. These historical tests were not rerun here, and no
 browser/iPad visual behavior was verified. Existing FinTrackCore verification
-is now 22 passing Windows tests, including subsequent treatment/review and draft
-compatibility work. This documentation review added no native
+was 22 passing Windows tests after treatment/review and draft compatibility work;
+the subsequent export/display batch now passes 34. This documentation review added no native
 build or domain-test coverage.
 
 ## What the existing website actually does

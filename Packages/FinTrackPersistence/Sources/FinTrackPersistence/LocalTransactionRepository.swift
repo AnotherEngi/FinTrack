@@ -130,6 +130,21 @@ public final class LocalTransactionRepository: TransactionRepository {
         }
     }
 
+    /// Opt-in current-date fixtures for the table. Existing UUIDs and edits win.
+    @discardableResult
+    public func addSyntheticTableExamples(asOf date: TransactionDate) throws -> Int {
+        let existing = Set(try fetchAll().map(\.id))
+        let additions = try SyntheticTableExamples.make(asOf: date).filter { !existing.contains($0.id) }
+        guard !additions.isEmpty else { return 0 }
+        try committing {
+            for record in additions {
+                try record.validateReviewState(catalog: catalog)
+                context.insert(try Row(record))
+            }
+        }
+        return additions.count
+    }
+
     private func row(id: UUID) throws -> Row? {
         var descriptor = FetchDescriptor<Row>(predicate: #Predicate { $0.recordID == id })
         descriptor.fetchLimit = 1

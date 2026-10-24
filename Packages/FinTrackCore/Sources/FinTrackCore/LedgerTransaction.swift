@@ -12,13 +12,15 @@ public struct TransactionDraft: Codable, Equatable, Sendable {
     public var tags: [String]
     public var exceptionalEvent: Bool
     public var activityDate: TransactionDate?
+    public var source: TransactionSource?
     public let legacyReviewStatus: LegacyReviewStatus?
 
     public init(date: TransactionDate, payee: String, amount: Money,
                 notes: String = "", answer: String = "", postingStatus: PostingStatus = .posted,
                 treatment: TransactionTreatment = .unresolved, categoryID: String? = nil,
                 tags: [String] = [], exceptionalEvent: Bool = false,
-                activityDate: TransactionDate? = nil, legacyReviewStatus: LegacyReviewStatus? = nil) {
+                activityDate: TransactionDate? = nil, legacyReviewStatus: LegacyReviewStatus? = nil,
+                source: TransactionSource? = nil) {
         self.date = date
         self.payee = payee
         self.amount = amount
@@ -31,9 +33,14 @@ public struct TransactionDraft: Codable, Equatable, Sendable {
         self.exceptionalEvent = exceptionalEvent
         self.activityDate = activityDate
         self.legacyReviewStatus = legacyReviewStatus
+        self.source = source
     }
 
     public func validate() throws {
+        if let source {
+            guard !source.label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  source.label.count <= 120 else { throw ReviewError.invalidSource }
+        }
         guard !payee.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw LedgerError.missingPayee
         }
@@ -51,12 +58,12 @@ public struct TransactionDraft: Codable, Equatable, Sendable {
         date != old.date || activityDate != old.activityDate || payee != old.payee
             || amount != old.amount || postingStatus != old.postingStatus || treatment != old.treatment
             || categoryID != old.categoryID || Set(tags) != Set(old.tags)
-            || exceptionalEvent != old.exceptionalEvent
+            || exceptionalEvent != old.exceptionalEvent || source != old.source
     }
 
     private enum CodingKeys: String, CodingKey {
         case date, payee, amount, notes, answer, postingStatus, treatment, categoryID
-        case tags, exceptionalEvent, activityDate, legacyReviewStatus, reviewStatus
+        case tags, exceptionalEvent, activityDate, legacyReviewStatus, reviewStatus, source
     }
 
     public init(from decoder: any Decoder) throws {
@@ -73,7 +80,8 @@ public struct TransactionDraft: Codable, Equatable, Sendable {
             exceptionalEvent: values.decodeIfPresent(Bool.self, forKey: .exceptionalEvent) ?? false,
             activityDate: values.decodeIfPresent(TransactionDate.self, forKey: .activityDate),
             legacyReviewStatus: values.decodeIfPresent(LegacyReviewStatus.self, forKey: .legacyReviewStatus)
-                ?? values.decodeIfPresent(LegacyReviewStatus.self, forKey: .reviewStatus))
+                ?? values.decodeIfPresent(LegacyReviewStatus.self, forKey: .reviewStatus),
+            source: values.decodeIfPresent(TransactionSource.self, forKey: .source))
     }
 
     public func encode(to encoder: any Encoder) throws {
@@ -90,6 +98,7 @@ public struct TransactionDraft: Codable, Equatable, Sendable {
         try values.encode(exceptionalEvent, forKey: .exceptionalEvent)
         try values.encodeIfPresent(activityDate, forKey: .activityDate)
         try values.encodeIfPresent(legacyReviewStatus, forKey: .legacyReviewStatus)
+        try values.encodeIfPresent(source, forKey: .source)
     }
 }
 
@@ -103,11 +112,15 @@ public struct LedgerTransaction: Codable, Equatable, Identifiable, Sendable {
     public let discussionRequested: Bool
     public let assistantContext: AssistantContext
     public let reviewHistory: [ReviewDecision]
+    public let classificationProvenance: ClassificationProvenance
+    public let discussionProgress: DiscussionProgress?
 
     public init(id: UUID = UUID(), revision: Int64 = 1, createdAt: Date = .now,
                 updatedAt: Date? = nil, draft: TransactionDraft, approval: ApprovalStatus? = nil,
                 discussionRequested: Bool = false, assistantContext: AssistantContext = .init(),
-                reviewHistory: [ReviewDecision] = []) throws {
+                reviewHistory: [ReviewDecision] = [],
+                classificationProvenance: ClassificationProvenance = .init(),
+                discussionProgress: DiscussionProgress? = nil) throws {
         try draft.validate()
         guard revision > 0 else { throw LedgerError.invalidRevision }
         let updated = updatedAt ?? createdAt
@@ -121,6 +134,9 @@ public struct LedgerTransaction: Codable, Equatable, Identifiable, Sendable {
         self.discussionRequested = discussionRequested
         self.assistantContext = assistantContext
         self.reviewHistory = reviewHistory
+        self.classificationProvenance = classificationProvenance
+        guard discussionRequested || discussionProgress == nil else { throw ReviewError.discussionNotRequested }
+        self.discussionProgress = discussionRequested ? discussionProgress ?? .awaitingExport : nil
         try validateReviewState()
     }
 
@@ -136,7 +152,9 @@ public struct LedgerTransaction: Codable, Equatable, Identifiable, Sendable {
         return try Self(id: id, revision: next, createdAt: createdAt,
             updatedAt: max(timestamp, updatedAt), draft: draft, approval: nextApproval,
             discussionRequested: draft.treatment.excludedFromReview ? false : discussionRequested,
-            assistantContext: assistantContext, reviewHistory: reviewHistory)
+            assistantContext: assistantContext, reviewHistory: reviewHistory,
+            classificationProvenance: classificationProvenance.afterManualEdit(from: self.draft, to: draft),
+            discussionProgress: draft.treatment.excludedFromReview ? nil : discussionProgress)
     }
 
     public func reviewBlockReason(for action: ReviewAction, catalog: ReviewCatalog) -> String? {
@@ -160,12 +178,17 @@ public struct LedgerTransaction: Codable, Equatable, Identifiable, Sendable {
         let decision = ReviewDecision(request: request, appliedRevision: next, createdAt: appliedAt)
         let nextApproval: ApprovalStatus = request.action == .approve ? .confirmed
             : request.action == .reopen ? .unreviewed : approval
+        let discusses = request.action == .discuss || request.action == .markDiscussionInProgress
         return try Self(id: id, revision: next, createdAt: createdAt, updatedAt: appliedAt,
-            draft: draft, approval: nextApproval, discussionRequested: request.action == .discuss,
-            assistantContext: assistantContext, reviewHistory: reviewHistory + [decision])
+            draft: draft, approval: nextApproval, discussionRequested: discusses,
+            assistantContext: assistantContext, reviewHistory: reviewHistory + [decision],
+            classificationProvenance: classificationProvenance,
+            discussionProgress: discusses ? (request.action == .discuss ? .awaitingExport : .reviewingInChatGPT) : nil)
     }
 
     public func validateReviewState(catalog: ReviewCatalog? = nil) throws {
+        try classificationProvenance.validate(for: draft)
+        guard discussionRequested == (discussionProgress != nil) else { throw ReviewError.invalidApproval }
         if approval == .confirmed {
             guard draft.postingStatus == .posted, draft.treatment.contributesToSpending,
                   let categoryID = draft.categoryID, !categoryID.isEmpty else { throw ReviewError.invalidApproval }
@@ -189,6 +212,7 @@ public struct LedgerTransaction: Codable, Equatable, Identifiable, Sendable {
     private func checkReviewAction(_ action: ReviewAction, catalog: ReviewCatalog) throws {
         if action == .skip { return }
         guard !draft.treatment.excludedFromReview else { throw ReviewError.excludedTreatment }
+        if action == .markDiscussionInProgress && !discussionRequested { throw ReviewError.discussionNotRequested }
         if action == .approve {
             if draft.postingStatus == .pending { throw ReviewError.pendingApproval }
             guard draft.postingStatus == .posted else { throw ReviewError.unresolvedPosting }
@@ -206,6 +230,7 @@ public struct LedgerTransaction: Codable, Equatable, Identifiable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case id, revision, createdAt, updatedAt, draft, approval, discussionRequested, assistantContext, reviewHistory
+        case classificationProvenance, discussionProgress
     }
 
     public init(from decoder: any Decoder) throws {
@@ -219,7 +244,9 @@ public struct LedgerTransaction: Codable, Equatable, Identifiable, Sendable {
             approval: values.decodeIfPresent(ApprovalStatus.self, forKey: .approval),
             discussionRequested: values.decodeIfPresent(Bool.self, forKey: .discussionRequested) ?? false,
             assistantContext: values.decodeIfPresent(AssistantContext.self, forKey: .assistantContext) ?? .init(),
-            reviewHistory: values.decodeIfPresent([ReviewDecision].self, forKey: .reviewHistory) ?? []
+            reviewHistory: values.decodeIfPresent([ReviewDecision].self, forKey: .reviewHistory) ?? [],
+            classificationProvenance: values.decodeIfPresent(ClassificationProvenance.self, forKey: .classificationProvenance) ?? .init(),
+            discussionProgress: values.decodeIfPresent(DiscussionProgress.self, forKey: .discussionProgress)
         )
     }
 }
@@ -227,9 +254,11 @@ public struct LedgerTransaction: Codable, Equatable, Identifiable, Sendable {
 public enum LedgerError: Error, Equatable, LocalizedError {
     case invalidDate, missingPayee, invalidRevision, invalidTimestamp
     case staleRevision, duplicateID, recordNotFound, demoRequiresEmptyStore
+    case unfinishedDraft
 
     public var errorDescription: String? {
         switch self {
+        case .unfinishedDraft: "Finish or discard the unsaved draft for this transaction before applying a review action."
         case .invalidDate: "Enter a valid date as YYYY-MM-DD."
         case .missingPayee: "Enter a payee or description."
         case .invalidRevision: "This record has an invalid revision."

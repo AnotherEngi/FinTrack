@@ -5,6 +5,7 @@ import FinTrackCore
 struct TransactionEditorView: View {
     var ledger: LedgerViewModel
     var onAdvance: (UUID) -> Void
+    let startDiscussion: Bool
     @Environment(\.dismiss) private var dismiss
     @State private var draft: EditorDraft
     @State private var status = "Valid edits save on this iPad as you type."
@@ -12,10 +13,13 @@ struct TransactionEditorView: View {
     @State private var needsRetry = false
     @State private var draftWriteFailed = false
     @State private var pendingRequest: ReviewRequest?
+    @FocusState private var noteFocused: Bool
 
-    init(ledger: LedgerViewModel, draft: EditorDraft, onAdvance: @escaping (UUID) -> Void) {
+    init(ledger: LedgerViewModel, draft: EditorDraft, startDiscussion: Bool = false,
+         onAdvance: @escaping (UUID) -> Void) {
         self.ledger = ledger
         self.onAdvance = onAdvance
+        self.startDiscussion = startDiscussion
         _draft = State(initialValue: draft)
     }
 
@@ -30,7 +34,10 @@ struct TransactionEditorView: View {
                     TextField("Activity date (optional)", text: $draft.input.activityDateText)
                         .keyboardType(.numbersAndPunctuation).autocorrectionDisabled()
                     TextField("Payee or description", text: $draft.input.payee)
-                    TextField("Amount in USD", text: $draft.input.amountText)
+                    TextField("Source label (optional)", text: $draft.input.sourceLabel)
+                    Text("Use a label such as Sample Visa, without account numbers or credentials.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    TextField("Amount", text: $draft.input.amountText)
                         .keyboardType(.numbersAndPunctuation).autocorrectionDisabled()
                     Text("Expenses are positive (12.34). Refunds and income are negative (-12.34).")
                         .font(.caption).foregroundStyle(.secondary)
@@ -61,6 +68,7 @@ struct TransactionEditorView: View {
                 }
                 Section("Your Note to ChatGPT") {
                     TextField("Your note", text: $draft.input.notes, axis: .vertical).lineLimit(3...8)
+                        .focused($noteFocused)
                 }
                 if let record = currentRecord {
                     if !record.assistantContext.question.isEmpty || !record.assistantContext.reason.isEmpty {
@@ -115,6 +123,7 @@ struct TransactionEditorView: View {
                 }
             }
             .onChange(of: draft.input) { _, _ in pendingRequest = nil; saveChangedInput() }
+            .task { if startDiscussion { noteFocused = true } }
             .interactiveDismissDisabled(draftWriteFailed)
             .confirmationDialog("Discard unsaved input? Previously saved edits will remain.",
                                 isPresented: $discardConfirmation, titleVisibility: .visible) {
@@ -130,7 +139,15 @@ struct TransactionEditorView: View {
     private func reviewActions(_ record: LedgerTransaction) -> some View {
         Section("Review") {
             LabeledContent("Saved approval", value: record.approval.label)
-            if record.discussionRequested { Label("Needs discussion", systemImage: "bubble.left.and.bubble.right") }
+            if record.discussionRequested {
+                Label(record.discussionProgress == .reviewingInChatGPT ? "Reviewing in ChatGPT" : "Discussion waiting for export",
+                    systemImage: "bubble.left.and.bubble.right")
+                if record.discussionProgress != .reviewingInChatGPT {
+                    Button("Mark Reviewing in ChatGPT") { perform(.markDiscussionInProgress) }.disabled(needsRetry)
+                }
+                Text("This tracks your own workflow. FinTrack cannot see whether ChatGPT received or processed a file.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             let approvalReason = record.reviewBlockReason(for: .approve, catalog: ledger.catalog)
             if let approvalReason { Text(approvalReason).font(.caption).foregroundStyle(.secondary) }
             Button("Approve") { perform(.approve) }
@@ -162,7 +179,7 @@ struct TransactionEditorView: View {
             draft.expectedRevision = saved.revision
             pendingRequest = nil
             status = "Review action saved on this iPad."
-            if action != .reopen { onAdvance(draft.id) }
+            if [.approve, .discuss, .skip].contains(action) { onAdvance(draft.id) }
         } catch {
             status = "Review action was not applied: \(error.localizedDescription)"
         }

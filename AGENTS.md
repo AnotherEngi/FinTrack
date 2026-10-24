@@ -9,7 +9,8 @@ the main testing and usage device: model MHQU3LL/A, reported OS 27.0. The user
 reported macOS 26.5.2 (25F84), Xcode 26.6 (17F113), and Swift 6.3.3
 (swiftlang-6.3.3.1.3, clang-2100.1.1.101). Recommend macOS 26.6 or later with
 stable Xcode 27.x for the iPadOS 27 SDK; an update has not yet been confirmed.
-The user will complete those updates before Mac work is needed. Version 1 is for
+The user later reported a successful app build and physical-iPad refund edit/
+reopen persistence check; exact updated tool versions remain unconfirmed. Version 1 is for
 one user on one iPad. The user requires cloud-backed storage and prefers their
 Apple iCloud storage; actual iCloud settings and backup availability are unverified.
 
@@ -25,6 +26,32 @@ source remains in Downloads, unchanged and outside this repo. Use its behavior
 and synthetic tests as reference, not its browser auth/Sheet storage architecture.
 Current transaction/review behavior and migration limits are documented in
 [review workflow](docs/review-workflow.md).
+The user approved and locked the refined transaction table design on 2026-10-24,
+captured in
+[transaction design](docs/design/transactions.md). Preserve its sorting, optional
+approved/non-approved split, merchant/tag status pills, detailed editor, and
+independent session/discussion indicators. The HTML preview remains design-only;
+the native table, local source aliases, per-field provenance, process-session
+markers, and explicitly user-tracked discussion progress are now implemented in
+source. Full bank provenance/import and automatic processing receipts remain future work.
+Use the approved preview defaults as the implementation baseline: merchant/tag
+status pills, comfortable rows, and a detailed edit sheet. Earlier preview
+alternatives are exploratory, not the approved layout. This approval records the
+design decision. The native implementation still requires Mac/iPad validation;
+see docs/ipad-acceptance.md for the combined table/export/ChatGPT test session.
+Standing UI decision: protect screen space. Do not put a FinTrack branding/header
+bar on working screens or repeat an active tab name as a page heading. The
+transaction workspace omits permanent color legends, record/approval counts,
+and the known USD label. Use a thin leading activity column with an icon heading,
+equal icon action buttons, top search/date presets, and an **Amalgamate** switch
+(on combines tables; off separates approved rows below non-approved rows).
+Keep accessible labels and usable touch targets. Currency remains explicit in
+the data model/exports. See the design notes before adding interface chrome.
+The user explicitly requested public source visibility for anonymous pulls on
+the work Mac. `AnotherEngi/FinTrack` was made public on 2026-10-24; GitHub access
+checks showed only the owner with write access, no collaborators/invitations or
+deploy keys. Keep the work Mac free of GitHub write credentials. Public source
+does not change the requirement to keep financial data and credentials private.
 
 ## Required behavior
 
@@ -72,9 +99,12 @@ Current transaction/review behavior and migration limits are documented in
 ## Implementation guidance
 
 - The user approved proceeding with the local-first prototype. It now uses
-  local-only SwiftData, pending Mac save/migration/recovery validation before
-  real-data use. Cloud backup requirements remain; backup archive export/restore
-  is not implemented. The ChatGPT exchange mechanism is still unresolved.
+  local-only SwiftData. The user reports both Mac package test suites passed;
+  the four focused iPad checks provisionally passed based on the user's report.
+  Backup/restore validation remains before real-data use.
+  Cloud backup requirements remain; backup archive export/restore
+  is not implemented. Manual ChatGPT export is implemented; suggestion import
+  and direct subscription sign-in remain future work. See docs/chatgpt-export.md.
 - Favor a small Swift package for portable finance rules and exchange contracts,
   with SwiftUI and the selected Apple persistence adapter outside that package.
 - Use stable record IDs, exact monetary arithmetic (never binary floating point
@@ -111,8 +141,27 @@ Current transaction/review behavior and migration limits are documented in
   and why. See docs/development.md for build commands and outstanding validation.
 - Run `swift test --package-path Packages/FinTrackCore` on Windows or Mac with a
   working Swift toolchain. Run the FinTrackPersistence package tests and app build
-  on Mac. FinTrackCore compiled with Windows Swift 6.4.1 and all 22 tests passed
-  on 2026-10-24. Apple persistence tests and the Xcode build have not run yet.
+  on Mac. FinTrackCore compiled with Windows Swift 6.4.1 and all 50 tests passed
+  on 2026-10-24. The user reported that the app builds and an edited synthetic
+  refund amount persists after closing/reopening on the physical iPad. The user
+  also reports both FinTrackCore and FinTrackPersistence tests passed on Mac;
+  test logs/counts were not supplied. The user says all four focused iPad checks
+  appeared to work: approval/classification edits, discussion/pending restrictions,
+  force-quit draft recovery, and offline creation/relaunch. Treat these as
+  provisional passes. See docs/device-verification.md; keep user reports
+  distinct from agent-executed test results.
+- The latest batch implements the approved native Transactions table alongside
+  Overview, Questions, Review history, and ChatGPT export. SwiftData schema v2 is
+  unchanged; its domain payload gains backward-compatible optional source,
+  classification-provenance, and discussion-progress fields. Old fields default
+  to unknown source/origin and awaiting-export for an existing discussion request.
+  All 50 core tests pass on Windows. All ten native app/persistence source/test
+  files passed syntax parsing only; 12 Apple persistence tests await this batch's
+  Mac run. Earlier user-reported Mac/iPad passes predate this batch.
+  Follow docs/ipad-acceptance.md for one combined Mac/iPad/ChatGPT session.
+  Exports include only selected committed records; notes and assistant context
+  require explicit opt-in. Keep Int64 amounts/revisions as strings in the exchange
+  contract. Exporting or receiving analysis cannot approve or edit records.
 - Windows setup scripts are in scripts/. The initial prerequisite installation
   was canceled, but Swift 6.4.1 and VS 2022 Developer PowerShell 17.14.42 are now
   available. Refresh the process PATH or reopen terminals after tool installation.
@@ -122,8 +171,8 @@ Current transaction/review behavior and migration limits are documented in
   dot-decimal entry remains a prototype convention. Explicit treatment/posting,
   approval/discussion, separate assistant context, tags, and Exceptional Event are
   implemented in source. Category selection currently uses an invented catalog;
-  full taxonomy/subcategories, splits, source provenance, reimbursements, bank
-  imports, backup archives, and AI exchange remain future work.
+  full taxonomy/subcategories, splits, original bank provenance, reimbursements, bank
+  imports, backup archives, and AI suggestion import remain future work.
 - Schema v2 adds a validated domain payload alongside frozen v1 fields. A staged
   migration preserves old native review flags as history and marks missing
   treatment/posting/classification unresolved. Do not infer approval from those
@@ -132,3 +181,13 @@ Current transaction/review behavior and migration limits are documented in
 - Review requests are distinct from draft edits. Preserve per-record action IDs,
   expected revisions, explicit intent, and idempotency. Skip creates no decision.
   Local discussion requests do not imply ChatGPT was contacted or processed them.
+- Source labels are local aliases with UUIDs, not bank account numbers or a bank
+  import identity system. Category/tag provenance is retained through approval;
+  manual classification changes update only the affected origins. Older unknown
+  origins remain neutral. Session markers register successful distinct writes,
+  survive backgrounding/reload, and clear on a new app process. Discussion progress
+  is explicitly user-marked; never infer it from export or foreground changes.
+- Opt-in table examples use a separate stable UUID namespace and append only
+  missing rows atomically. Never rewrite existing records, including examples
+  the user edited. Existing older samples remain preserved and may need Custom
+  dates because the approved table defaults to one month.

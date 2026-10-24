@@ -16,6 +16,12 @@ implementation conventions; it does not finalize bank import or ChatGPT formats.
 | TransactionDraft | Date/optional activity date, payee, money, user notes/answer, posting/treatment, category ID, tags, Exceptional Event, and preserved legacy flag |
 | LedgerTransaction | UUID, positive revision, timestamps, validated draft, approval/discussion, immutable assistant context, and review history. Stale edits/actions fail; identical edits are no-ops |
 | TransactionInput / EditorDraft | Portable raw incomplete text plus app wrapper UUID/expected revision/creation time. Stored separately so invalid input does not corrupt ledger records |
+| LedgerSelection / LedgerOverview | Shared date/search/review selection and read-only category/month totals; exact spending arithmetic; overlapping tag/event exclusions omit a record once |
+| ReviewPacket / ReviewExport | Separate version 1 selected-record export with JSON/CSV/prompt, decimal-string revisions/amounts, explicit optional context, and no record mutation or import capability |
+| TransactionSource | Optional local UUID alias and per-record display label; not a bank account number, original bank transaction ID, or global source catalog |
+| ClassificationProvenance | Category origin and tag-to-origin map: unknown/user/assistant; approval retains origins, manual classification edits update only affected fields |
+| DiscussionProgress | Awaiting export or explicitly user-marked reviewing in ChatGPT; not an upload/processing receipt |
+| WorkspacePeriod / TransactionTableSort / SessionChanges | Calendar date presets, exact deterministic column sorting, and successful distinct writes tracked for this app process |
 
 `TransactionDraft` is a domain edit value. `EditorDraft` additionally retains raw
 input such as an unfinished date or minus sign, which is not a valid transaction.
@@ -44,8 +50,9 @@ initial model. See [website-handoff-review.md](website-handoff-review.md).
   Sheet's two-slot/one-subcategory limitation by accident.
 
 The remaining gaps need synthetic tests before real import or broad native UI
-expansion. Manual review packet exchange is allowed initially; its native schema
-has not been finalized. Category selection currently uses an invented catalog;
+expansion. Manual review export now has a version 1 contract documented in
+[chatgpt-export.md](chatgpt-export.md); proposal import is not implemented.
+Category selection currently uses an invented catalog;
 full taxonomy management and balanced splits are not yet implemented.
 
 Eight synthetic weeks contain three records per week (24 total), covering
@@ -58,17 +65,31 @@ Some invented transactions have explicit fictional approval history; a pending
 purchase and separated assistant context exercise the review UI. Demo loading
 does not create approval from a merchant/category rule.
 
+The table has a separate opt-in set of twelve current-date examples with a new
+stable UUID namespace. Appending skips existing IDs and never refreshes dates or
+overwrites edited examples. It includes invented source labels and explicit
+fictional category/tag origins and discussion actions. Older examples are not
+retroactively relabeled as AI/manual or assigned a guessed source.
+
 ## Persistence prototype
 
 `FinTrackPersistence` now uses SwiftData schema 2.0.0. Frozen v1 fields remain as
+before. The current table batch adds optional source data to the draft and
+classification-provenance/discussion-progress fields to the domain payload,
+without changing the SwiftData schema. Older v2 payloads decode absent source as
+nil and origins as unknown; an existing discussion defaults to awaiting export.
+New raw drafts retain source identity through incomplete input. The original
+columns continue as
 queryable mirrors and legacy metadata; an optional payload stores the richer
 validated domain record. Reads check payload/column agreement and catalog-based
 approval validity. Existing v1 rows without payload preserve original fields and
 their earlier review flag, with unknown posting/treatment/category unresolved and
 current approval Unreviewed. Do not confuse that prototype flag with an actual
 website classification approval. No store is reset after read/migration failure.
-An explicit lightweight v1-to-v2 migration and preservation test are authored but
-have not run on Mac. Full details are in review-workflow.md.
+An explicit lightweight v1-to-v2 migration and preservation test are implemented.
+The user reports the Mac persistence suite passed; logs were not supplied.
+Backup/restore and real-data migration readiness remain separate checks.
+Full details are in review-workflow.md.
 
 The agreed amount convention is recorded separately in
 `FinTrack.store.amount-sign` as `outflow-positive-v1`. Schema evolution does not

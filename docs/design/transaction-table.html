@@ -1,0 +1,468 @@
+<meta charset="utf-8">
+<div id="fintrack-transaction-design" aria-label="FinTrack transaction workspace design">
+  <style>
+    #fintrack-transaction-design {
+      color-scheme: inherit;
+      --ft-surface: light-dark(#ffffff, #1c1c1e);
+      --ft-canvas: light-dark(#f5f6f8, #141416);
+      --ft-ink: light-dark(#20232b, #f3f3f6);
+      --ft-muted: light-dark(#616774, #adb2bf);
+      --ft-line: light-dark(#e5e7ed, #35353c);
+      --ft-blue: light-dark(#1459ad, #a0c8ff);
+      --ft-blue-fill: light-dark(#e8f1fe, #233b5b);
+      --ft-orange: light-dark(#985514, #ffce94);
+      --ft-orange-fill: light-dark(#fff0dd, #49321e);
+      --ft-green: light-dark(#236c4f, #9fdfbf);
+      --ft-green-fill: light-dark(#e7f4ed, #223f32);
+      --ft-shadow: light-dark(#24304a24, #00000080);
+      --ft-row-padding: 15px;
+      color: var(--ft-ink);
+      font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      width: 100%;
+    }
+    #fintrack-transaction-design * { box-sizing: border-box; }
+    #fintrack-transaction-design [hidden] { display: none !important; }
+    #fintrack-transaction-design .ft-shell { position: relative; background: var(--ft-canvas); border-radius: 18px; overflow: hidden; }
+    #fintrack-transaction-design button, #fintrack-transaction-design input, #fintrack-transaction-design select,
+    #fintrack-transaction-design textarea { font: inherit; color: inherit; }
+    #fintrack-transaction-design button { background: var(--ft-surface); border: 1px solid var(--ft-line); border-radius: 8px; }
+    #fintrack-transaction-design button:disabled { opacity: .5; cursor: not-allowed; }
+    #fintrack-transaction-design button:not(:disabled):hover { background: var(--ft-canvas); }
+    #fintrack-transaction-design .ft-preview { margin-left: auto; align-self: center; color: var(--ft-muted); font-size: 11px; white-space: nowrap; }
+    #fintrack-transaction-design .ft-nav { display: flex; align-items: center; flex-wrap: wrap; gap: 2px; padding: 8px 14px; background: var(--ft-surface); border-bottom: 1px solid var(--ft-line); }
+    #fintrack-transaction-design .ft-nav > span { padding: 8px 12px; color: var(--ft-muted); border-radius: 8px; }
+    #fintrack-transaction-design .ft-nav [aria-current] { background: var(--ft-blue-fill); color: var(--ft-blue); font-weight: 500; }
+    #fintrack-transaction-design .ft-main { padding: 16px 18px 12px; }
+    #fintrack-transaction-design .ft-toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 0 0 16px; }
+    #fintrack-transaction-design .ft-search { flex: 1 1 180px; min-width: 160px; display: flex; align-items: center; gap: 8px; padding: 0 10px; background: var(--ft-surface); border: 1px solid var(--ft-line); border-radius: 9px; }
+    #fintrack-transaction-design .ft-search input { width: 100%; min-width: 0; padding: 9px 0; background: transparent; border: 0; }
+    #fintrack-transaction-design .ft-search i { color: var(--ft-muted); font-style: normal; font-size: 18px; }
+    #fintrack-transaction-design .ft-search svg { width: 16px; height: 16px; }
+    #fintrack-transaction-design .ft-ranges { display: flex; flex-wrap: wrap; gap: 3px; }
+    #fintrack-transaction-design .ft-ranges button { min-height: 36px; padding: 6px 10px; font-size: 12px; white-space: nowrap; }
+    #fintrack-transaction-design .ft-ranges button[aria-pressed="true"] { color: var(--ft-blue); background: var(--ft-blue-fill); border-color: transparent; }
+    #fintrack-transaction-design .ft-subtitle { color: var(--ft-muted); font-size: 12px; }
+    #fintrack-transaction-design .ft-switch { display: flex; align-items: center; gap: 8px; min-height: 36px; white-space: nowrap; margin-left: auto; }
+    #fintrack-transaction-design .ft-switch input { appearance: none; flex-shrink: 0; width: 36px; height: 22px; border-radius: 999px; background: var(--ft-line); margin: 0; position: relative; }
+    #fintrack-transaction-design .ft-switch input::after { content: ""; position: absolute; width: 18px; height: 18px; top: 2px; left: 2px; background: light-dark(#ffffff, #f3f3f6); border-radius: 50%; box-shadow: 0 1px 3px var(--ft-shadow); }
+    #fintrack-transaction-design .ft-switch input:checked { background: var(--ft-blue); }
+    #fintrack-transaction-design .ft-switch input:checked::after { transform: translateX(14px); }
+    #fintrack-transaction-design .ft-custom-dates { display: flex; align-items: end; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+    #fintrack-transaction-design .ft-custom-dates label { display: flex; flex-direction: column; gap: 5px; font-size: 12px; }
+    #fintrack-transaction-design .ft-custom-dates input { min-height: 36px; padding: 7px 9px; max-width: 100%; border: 1px solid var(--ft-line); border-radius: 8px; background: var(--ft-surface); }
+    #fintrack-transaction-design .ft-filter-error { color: var(--ft-orange); margin: 0 0 12px; }
+    #fintrack-transaction-design .ft-group { margin-bottom: 14px; }
+    #fintrack-transaction-design .ft-group-title { display: flex; align-items: center; gap: 9px; font-size: 13px; font-weight: 500; padding: 0 4px 10px; }
+    #fintrack-transaction-design .ft-table-wrap { overflow-x: auto; background: var(--ft-surface); border: 1px solid var(--ft-line); border-radius: 12px; }
+    #fintrack-transaction-design table { color: var(--ft-ink); font: inherit; border-collapse: collapse; width: 100%; min-width: 900px; table-layout: fixed; }
+    #fintrack-transaction-design th { background: var(--ft-canvas); text-align: left; font-weight: 500; color: var(--ft-muted); }
+    #fintrack-transaction-design th, #fintrack-transaction-design td { padding: var(--ft-row-padding) 10px; vertical-align: middle; overflow-wrap: anywhere; }
+    #fintrack-transaction-design td { border-top: 1px solid var(--ft-line); }
+    #fintrack-transaction-design th button { display: inline-flex; gap: 4px; align-items: center; border: 0; padding: 2px 0; background: transparent; color: inherit; font-size: 11px; white-space: nowrap; }
+    #fintrack-transaction-design th button:not(:disabled):hover { color: var(--ft-ink); background: transparent; }
+    #fintrack-transaction-design .ft-sort-mark { opacity: .45; font-size: 11px; }
+    #fintrack-transaction-design th[aria-sort]:not([aria-sort="none"]) { color: var(--ft-blue); }
+    #fintrack-transaction-design th[aria-sort]:not([aria-sort="none"]) .ft-sort-mark { opacity: 1; }
+    #fintrack-transaction-design td.ft-money, #fintrack-transaction-design th.ft-money { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    #fintrack-transaction-design .ft-date { font-variant-numeric: tabular-nums; white-space: nowrap; font-size: 12px; }
+    #fintrack-transaction-design .ft-secondary { display: block; color: var(--ft-muted); font-size: 11px; margin-top: 3px; }
+    #fintrack-transaction-design .ft-pill { display: inline-flex; align-items: center; gap: 5px; padding: 4px 9px; border-radius: 999px; max-width: 100%; font-size: 12px; }
+    #fintrack-transaction-design .ft-pill.ai { background: var(--ft-orange-fill); color: var(--ft-orange); }
+    #fintrack-transaction-design .ft-pill.user { background: var(--ft-blue-fill); color: var(--ft-blue); }
+    #fintrack-transaction-design .ft-pill.approved { background: var(--ft-green-fill); color: var(--ft-green); }
+    #fintrack-transaction-design .ft-tags { display: flex; flex-wrap: wrap; gap: 5px; }
+    #fintrack-transaction-design .ft-tag { padding: 3px 8px; font-size: 11px; }
+    #fintrack-transaction-design .ft-neutral { color: var(--ft-muted); }
+    #fintrack-transaction-design .ft-actions { display: flex; gap: 4px; align-items: center; }
+    #fintrack-transaction-design .ft-action { height: 32px; width: 32px; flex: 0 0 32px; padding: 0; display: inline-flex; justify-content: center; align-items: center; }
+    #fintrack-transaction-design .ft-action i { font-style: normal; font-size: 17px; }
+    #fintrack-transaction-design .ft-approve { color: var(--ft-green); }
+    #fintrack-transaction-design .ft-action svg { width: 16px; height: 16px; }
+    #fintrack-transaction-design .ft-state-cell { padding-left: 0; padding-right: 0; text-align: center; }
+    #fintrack-transaction-design .ft-activity { display: flex; justify-content: center; align-items: center; }
+    #fintrack-transaction-design .ft-activity button, #fintrack-transaction-design th.ft-state-cell button { display: inline-flex; justify-content: center; align-items: center; gap: 2px; padding: 0; width: 32px; height: 32px; background: transparent; border: 0; color: var(--ft-muted); }
+    #fintrack-transaction-design .ft-activity .ft-edited { color: var(--ft-blue); }
+    #fintrack-transaction-design .ft-activity .ft-waiting { color: var(--ft-orange); }
+    #fintrack-transaction-design .ft-activity .ft-progress { color: var(--ft-blue); }
+    #fintrack-transaction-design .ft-activity svg, #fintrack-transaction-design th.ft-state-cell svg { width: 14px; height: 14px; }
+    #fintrack-transaction-design .ft-activity i, #fintrack-transaction-design th.ft-state-cell i { font-style: normal; font-size: 15px; }
+    #fintrack-transaction-design .ft-empty { padding: 20px; color: var(--ft-muted); }
+    #fintrack-transaction-design .ft-status-line { min-height: 18px; color: var(--ft-blue); padding: 8px 4px 0; font-size: 12px; }
+    #fintrack-transaction-design .ft-status-line:empty { display: none; }
+    #fintrack-transaction-design .ft-shade { position: absolute; inset: 0; z-index: 5; display: flex; align-items: flex-start; justify-content: center; padding: 45px 22px; background: color-mix(in srgb, var(--ft-ink) 24%, transparent); }
+    #fintrack-transaction-design .ft-detail { background: var(--ft-surface); border: 1px solid var(--ft-line); border-radius: 16px; width: 580px; max-width: 100%; box-shadow: 0 20px 70px var(--ft-shadow); padding: 22px; }
+    #fintrack-transaction-design .ft-detail h3 { font-size: 19px; line-height: 1.25; margin: 0; font-weight: 600; letter-spacing: -.3px; }
+    #fintrack-transaction-design .ft-detail-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 15px; margin-bottom: 20px; }
+    #fintrack-transaction-design .ft-done { padding: 7px 13px; color: var(--ft-blue); font-weight: 500; }
+    #fintrack-transaction-design .ft-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    #fintrack-transaction-design .ft-field { display: flex; flex-direction: column; gap: 6px; font-size: 12px; }
+    #fintrack-transaction-design .ft-wide { grid-column: 1 / -1; }
+    #fintrack-transaction-design .ft-field input, #fintrack-transaction-design .ft-field select,
+    #fintrack-transaction-design .ft-field textarea { padding: 10px; min-width: 0; width: 100%; border: 1px solid var(--ft-line); border-radius: 8px; background: var(--ft-canvas); font-size: 14px; }
+    #fintrack-transaction-design .ft-field textarea { resize: vertical; min-height: 76px; }
+    #fintrack-transaction-design .ft-context { background: var(--ft-canvas); border-radius: 10px; padding: 12px; margin: 14px 0; }
+    #fintrack-transaction-design .ft-context-label { font-size: 11px; color: var(--ft-muted); margin-bottom: 4px; }
+    #fintrack-transaction-design .ft-detail-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; }
+    #fintrack-transaction-design .ft-detail-actions button { padding: 9px 13px; }
+    #fintrack-transaction-design .ft-detail-status { color: var(--ft-muted); font-size: 11px; margin-top: 12px; }
+    #fintrack-transaction-design .ft-error { color: var(--ft-orange); }
+    #fintrack-transaction-design .ft-inline { margin-top: 20px; }
+    #fintrack-transaction-design .ft-inline .ft-detail { width: 100%; max-width: 760px; margin: auto; box-shadow: none; }
+    @media (max-width: 600px) {
+      #fintrack-transaction-design .ft-main { padding: 18px 10px; }
+      #fintrack-transaction-design .ft-toolbar { gap: 10px; }
+      #fintrack-transaction-design .ft-search { flex-basis: 100%; }
+      #fintrack-transaction-design .ft-switch { margin-left: 0; }
+      #fintrack-transaction-design .ft-fields { grid-template-columns: 1fr; }
+      #fintrack-transaction-design .ft-shade { padding: 18px 10px; }
+      #fintrack-transaction-design .ft-detail { padding: 18px; }
+    }
+    @media (pointer: coarse) {
+      #fintrack-transaction-design .ft-action { width: 44px; height: 44px; flex-basis: 44px; }
+      #fintrack-transaction-design .ft-activity button, #fintrack-transaction-design th.ft-state-cell button { width: 44px; height: 44px; }
+      #fintrack-transaction-design th button, #fintrack-transaction-design .ft-ranges button { min-height: 44px; min-width: 44px; }
+      #fintrack-transaction-design .ft-switch { min-height: 44px; }
+      #fintrack-transaction-design .ft-search input, #fintrack-transaction-design .ft-custom-dates input { font-size: 16px; min-height: 44px; }
+      #fintrack-transaction-design col.ft-actions-col { width: 164px !important; }
+      #fintrack-transaction-design table { min-width: 944px; }
+      #fintrack-transaction-design .ft-field input, #fintrack-transaction-design .ft-field select,
+      #fintrack-transaction-design .ft-field textarea { font-size: 16px; }
+    }
+  </style>
+  <div class="ft-shell" aria-label="FinTrack transaction design">
+    <div class="ft-nav" aria-label="Workspace navigation preview">
+      <span>Overview</span><span aria-current="page">Transactions</span><span>Questions</span><span>Review history</span><span>ChatGPT export</span>
+      <small class="ft-preview">Synthetic preview</small>
+    </div>
+    <main class="ft-main">
+      <div class="ft-toolbar">
+        <label class="ft-search"><i data-lucide="search" aria-hidden="true">⌕</i><input type="search" data-search aria-label="Search transactions" placeholder="Search transactions"></label>
+        <div class="ft-ranges" aria-label="Date range">
+          <button class="cursor-interaction" data-range="1m" aria-pressed="true">1 month</button>
+          <button class="cursor-interaction" data-range="3m" aria-pressed="false">3 months</button>
+          <button class="cursor-interaction" data-range="6m" aria-pressed="false">6 months</button>
+          <button class="cursor-interaction" data-range="ytd" aria-pressed="false">YTD</button>
+          <button class="cursor-interaction" data-range="year" aria-pressed="false">Past year</button>
+          <button class="cursor-interaction" data-range="custom" aria-pressed="false">Custom</button>
+        </div>
+        <label class="ft-switch"><input type="checkbox" role="switch" data-amalgamate><span>Amalgamate</span></label>
+      </div>
+      <div class="ft-custom-dates" data-custom-dates hidden>
+        <label>From<input type="date" data-from value="2026-09-24"></label>
+        <label>Through<input type="date" data-through value="2026-10-24"></label>
+      </div>
+      <div class="ft-filter-error" data-filter-error role="alert" hidden></div>
+      <div data-tables></div>
+      <div class="ft-status-line" data-announcement role="status" aria-live="polite"></div>
+      <div data-detail-host hidden></div>
+    </main>
+  </div>
+  <script>
+  (() => {
+    const root = document.getElementById('fintrack-transaction-design');
+    const shell = root.querySelector('.ft-shell');
+    const tableHost = root.querySelector('[data-tables]');
+    const detailHost = root.querySelector('[data-detail-host]');
+    const announcement = root.querySelector('[data-announcement]');
+    const amalgamateInput = root.querySelector('[data-amalgamate]');
+    const searchInput = root.querySelector('[data-search]');
+    const fromInput = root.querySelector('[data-from]');
+    const throughInput = root.querySelector('[data-through]');
+    const customDates = root.querySelector('[data-custom-dates]');
+    const filterError = root.querySelector('[data-filter-error]');
+    // A fixed reference date keeps this synthetic preview useful when revisited.
+    // The native app's date controls will use the user's current calendar date.
+    const referenceDate = '2026-10-24';
+    const seed = [
+      { id:'grocery', date:'2026-10-24', cents:8437, merchant:'Maple Market', source:'Sample Visa', category:'Groceries', origin:'ai', tags:[{label:'Household',origin:'ai'}], approved:false, posting:'Posted', treatment:'Spending', discussion:null, note:'', question:'Were any of these household supplies?' },
+      { id:'dining', date:'2026-10-23', cents:2850, merchant:'Cedar Café', source:'Sample Mastercard', category:'Dining', origin:'user', tags:[{label:'Lunch',origin:'user'}], approved:false, posting:'Posted', treatment:'Spending', discussion:null, note:'Lunch with a friend.', question:'' },
+      { id:'hotel', date:'2026-10-22', cents:18600, merchant:'Harbor Inn', source:'Sample Visa', category:'Travel · Hotel', origin:'ai', tags:[{label:'Sample getaway',origin:'user'},{label:'Travel',origin:'ai'}], approved:false, posting:'Posted', treatment:'Spending', discussion:'pending', note:'Please check whether this needs a different category.', question:'Was this personal travel?' },
+      { id:'transit', date:'2026-10-21', cents:750, merchant:'City Transit', source:'Sample debit', category:'Transport', origin:'ai', tags:[{label:'Commute',origin:'ai'}], approved:false, posting:'Posted', treatment:'Spending', discussion:'inProgress', note:'Illustrative discussion example.', question:'Is this a regular commute?' },
+      { id:'pending', date:'2026-10-20', cents:4620, merchant:'Orchard Foods', source:'Sample Mastercard', category:'Groceries', origin:'ai', tags:[], approved:false, posting:'Pending', treatment:'Spending', discussion:null, note:'', question:'' },
+      { id:'refund', date:'2026-10-19', cents:-1299, merchant:'Maple Market refund', source:'Sample Visa', category:'Groceries', origin:'user', tags:[{label:'Household',origin:'ai'}], approved:true, posting:'Posted', treatment:'Merchant refund', discussion:null, note:'An invented returned item.', question:'' },
+      { id:'utility', date:'2026-10-17', cents:6740, merchant:'Valley Electric', source:'Sample checking', category:'Electricity', origin:'ai', tags:[{label:'Home',origin:'user'}], approved:true, posting:'Posted', treatment:'Spending', discussion:null, note:'', question:'' },
+      { id:'payment', date:'2026-10-12', cents:20000, merchant:'Sample card payment', source:'Sample checking', category:'Card payment', origin:null, tags:[], approved:false, posting:'Posted', treatment:'Payment', discussion:null, note:'Not a spending item.', question:'' },
+      { id:'summer', date:'2026-08-09', cents:2380, merchant:'Birch Lunchroom', source:'Sample Visa', category:'Dining', origin:'ai', tags:[{label:'Sample outing',origin:'ai'}], approved:false, posting:'Posted', treatment:'Spending', discussion:null, note:'Invented history for date filtering.', question:'' },
+      { id:'spring', date:'2026-05-09', cents:5920, merchant:'Valley Electric', source:'Sample checking', category:'Electricity', origin:'user', tags:[], approved:true, posting:'Posted', treatment:'Spending', discussion:null, note:'Invented history for date filtering.', question:'' },
+      { id:'winter', date:'2026-01-16', cents:1825, merchant:'Snowdrop Market', source:'Sample debit', category:'Groceries', origin:'ai', tags:[], approved:false, posting:'Posted', treatment:'Spending', discussion:null, note:'Invented history for date filtering.', question:'' },
+      { id:'previous-year', date:'2025-12-11', cents:4750, merchant:'Evergreen Supplies', source:'Sample Mastercard', category:'Household supplies', origin:'user', tags:[{label:'Home',origin:'user'}], approved:true, posting:'Posted', treatment:'Spending', discussion:null, note:'Invented history for date filtering.', question:'' }
+    ];
+    const settings = { density:'Comfortable', pills:'Merchant', details:'Detail sheet' };
+    let records = structuredClone(seed);
+    let split = true, sortKey = 'date', descending = true, activeID = null;
+    let selectedRange = '1m';
+    const edited = new Set();
+    const columns = [['activity','Activity'],['date','Date'],['cents','Amount'],['merchant','Merchant'],['source','Source'],['category','Category'],['tags','Tags'],['approved','Review']];
+    const categories = ['Groceries','Household supplies','Dining','Travel · Hotel','Transport','Electricity','Card payment'];
+    const escape = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const icons = () => { if (globalThis.lucide) lucide.createIcons({attrs:{width:16,height:16}}); };
+    const eligible = r => r.treatment === 'Spending' || r.treatment === 'Merchant refund';
+    const money = cents => { const digits = String(Math.abs(cents)).padStart(3,'0'); return (cents < 0 ? '−' : '') + digits.slice(0,-2) + '.' + digits.slice(-2); };
+    const amountInput = cents => money(cents).replace('−','-');
+    const statusFor = (r, origin) => r.approved ? 'approved' : origin || 'neutral';
+    const stateLabel = state => ({ai:'AI suggestion, not approved',user:'Your edit, not approved',approved:'Approved',neutral:'No classification provenance supplied'}[state]);
+    const pill = (label,state,extra='') => `<span class="ft-pill ${state} ${extra}" aria-label="${escape(label + ': ' + stateLabel(state))}" data-tooltip="${escape(stateLabel(state))}">${escape(label)}</span>`;
+    function monthsBefore(count) {
+      const [year,month,day] = referenceDate.split('-').map(Number);
+      const result = new Date(Date.UTC(year,month - 1 - count,1));
+      const lastDay = new Date(Date.UTC(result.getUTCFullYear(),result.getUTCMonth() + 1,0)).getUTCDate();
+      result.setUTCDate(Math.min(day,lastDay));
+      return result.toISOString().slice(0,10);
+    }
+    function bounds() {
+      if (selectedRange === 'custom') return {from:fromInput.value,through:throughInput.value};
+      const from = selectedRange === 'ytd' ? referenceDate.slice(0,4) + '-01-01'
+        : monthsBefore(selectedRange === '1m' ? 1 : selectedRange === '3m' ? 3 : selectedRange === '6m' ? 6 : 12);
+      return {from,through:referenceDate};
+    }
+    function visibleRecords() {
+      const range = bounds();
+      if (!range.from || !range.through || range.from > range.through) return [];
+      const normalize = value => String(value).normalize('NFD').replace(/\p{Diacritic}/gu,'').toLocaleLowerCase();
+      const query = normalize(searchInput.value.trim());
+      return records.filter(r => r.date >= range.from && r.date <= range.through && (!query ||
+        normalize([r.merchant,r.source,r.category,r.date,r.note,r.question,...r.tags.map(t => t.label)].join(' ')).includes(query)));
+    }
+    function dateLabel(iso) {
+      const text = new Intl.DateTimeFormat('en-US',{month:'short',day:'numeric',timeZone:'UTC'}).format(new Date(iso + 'T00:00:00Z'));
+      return escape(text) + (iso.slice(0,4) === referenceDate.slice(0,4) ? '' : `<span class="ft-secondary">${iso.slice(0,4)}</span>`);
+    }
+    function save() {
+      if (!window.openai?.setWidgetState) return;
+      window.openai.setWidgetState({
+        modelContent:{design:'Transaction table',density:settings.density,pillPlacement:settings.pills,detailPresentation:settings.details,amalgamate:!split,datePreset:selectedRange},
+        privateContent:{amalgamate:!split,selectedRange,customFrom:fromInput.value,customThrough:throughInput.value,sortKey,descending,settings:{...settings}}
+      }).catch(() => {});
+    }
+    function applySaved(snapshot) {
+      const state = snapshot?.privateContent;
+      if (!state) return;
+      if (typeof state.amalgamate === 'boolean') split = !state.amalgamate;
+      else if (typeof state.split === 'boolean') split = state.split;
+      if (['1m','3m','6m','ytd','year','custom'].includes(state.selectedRange)) selectedRange = state.selectedRange;
+      if (/^\d{4}-\d{2}-\d{2}$/.test(state.customFrom || '')) fromInput.value = state.customFrom;
+      if (/^\d{4}-\d{2}-\d{2}$/.test(state.customThrough || '')) throughInput.value = state.customThrough;
+      if (columns.some(([key]) => key === state.sortKey)) sortKey = state.sortKey;
+      if (typeof state.descending === 'boolean') descending = state.descending;
+      if (['Comfortable','Compact'].includes(state.settings?.density)) settings.density = state.settings.density;
+      if (['Merchant','Category'].includes(state.settings?.pills)) settings.pills = state.settings.pills;
+      if (['Detail sheet','Below table'].includes(state.settings?.details)) settings.details = state.settings.details;
+    }
+    function activityScore(r) { return (r.discussion === 'inProgress' ? 4 : r.discussion === 'pending' ? 2 : 0) + (edited.has(r.id) ? 1 : 0); }
+    function sortValue(r) {
+      if (sortKey === 'tags') return r.tags.map(t => t.label).join('; ');
+      if (sortKey === 'activity') return activityScore(r);
+      if (sortKey === 'approved') return eligible(r) ? (r.approved ? 2 : 1) : 0;
+      return r[sortKey];
+    }
+    function sorted(list) {
+      return [...list].sort((a,b) => {
+        const av = sortValue(a), bv = sortValue(b);
+        const order = typeof av === 'number' ? (av < bv ? -1 : av > bv ? 1 : 0) : String(av).localeCompare(String(bv));
+        return (descending ? -order : order) || a.id.localeCompare(b.id);
+      });
+    }
+    function activity(r) {
+      const marks = [];
+      const labels = [];
+      if (edited.has(r.id)) { labels.push('Changed this session'); marks.push('<i class="ft-edited" data-lucide="pencil-line" aria-hidden="true">✎</i>'); }
+      if (r.discussion === 'pending') { labels.push('Discussion waiting for export'); marks.push('<i class="ft-waiting" data-lucide="message-circle-more" aria-hidden="true">◷</i>'); }
+      if (r.discussion === 'inProgress') { labels.push('Discussion in progress, illustrative'); marks.push('<i class="ft-progress" data-lucide="loader-circle" aria-hidden="true">↻</i>'); }
+      return marks.length ? `<button class="cursor-interaction" data-action="activity" data-id="${r.id}" aria-label="${escape(labels.join('; '))}" data-tooltip="${escape(labels.join('; '))}">${marks.join('')}</button>`
+        : '<span class="ft-neutral" aria-label="No session activity">—</span>';
+    }
+    function row(r) {
+      const color = statusFor(r,r.origin);
+      const merchant = settings.pills === 'Merchant' && r.origin ? pill(r.merchant,color) : escape(r.merchant);
+      const category = settings.pills === 'Category' && r.origin ? pill(r.category,color) : escape(r.category);
+      const canApprove = eligible(r) && r.posting === 'Posted';
+      const actionLabel = !eligible(r) ? 'N/A' : r.approved ? 'Reopen' : 'Approve';
+      const disabled = !r.approved && !canApprove;
+      const explanation = !eligible(r) ? 'Outside spending review' : r.posting === 'Pending' ? 'Pending charges cannot be approved' : actionLabel + ' ' + r.merchant;
+      const approveIcon = !eligible(r) ? '<i data-lucide="circle-minus" aria-hidden="true">—</i>'
+        : r.approved ? '<i data-lucide="undo-2" aria-hidden="true">↶</i>' : '<i data-lucide="check" aria-hidden="true">✓</i>';
+      return `<tr data-row-id="${r.id}" data-approved="${r.approved}">
+        <td class="ft-state-cell"><div class="ft-activity">${activity(r)}</div></td>
+        <td class="ft-date" aria-label="${r.date}">${dateLabel(r.date)}</td>
+        <td class="ft-money">${money(r.cents)}${r.posting === 'Pending' ? '<span class="ft-secondary">Pending</span>' : ''}</td>
+        <td>${merchant}${!eligible(r) ? '<span class="ft-secondary">Outside review</span>' : ''}</td>
+        <td>${escape(r.source)}</td><td>${category}</td>
+        <td><div class="ft-tags">${r.tags.length ? r.tags.map(t => pill(t.label,statusFor(r,t.origin),'ft-tag')).join('') : '<span class="ft-neutral">—</span>'}</div></td>
+        <td><div class="ft-actions"><button class="ft-action ft-approve cursor-interaction" data-action="approve" data-id="${r.id}" aria-label="${escape(explanation)}" ${disabled ? 'disabled' : ''} data-tooltip="${escape(explanation)}">${approveIcon}</button><button class="ft-action cursor-interaction" data-action="discuss" data-id="${r.id}" aria-label="Discuss ${escape(r.merchant)}" data-tooltip="Discuss" ${eligible(r) ? '' : 'disabled'}><i data-lucide="messages-square" aria-hidden="true">🗨︎</i></button><button class="ft-action cursor-interaction" data-action="edit" data-id="${r.id}" aria-label="Edit ${escape(r.merchant)}" data-tooltip="Edit"><i data-lucide="square-pen" aria-hidden="true">✎</i></button></div></td></tr>`;
+    }
+    function table(title,list) {
+      return `<section class="ft-group" aria-label="${escape(title)}">${split ? `<div class="ft-group-title">${escape(title)}</div>` : ''}<div class="ft-table-wrap"><table aria-label="${escape(title)}"><colgroup><col style="width:44px"><col style="width:72px"><col style="width:88px"><col><col style="width:112px"><col style="width:128px"><col style="width:128px"><col class="ft-actions-col" style="width:128px"></colgroup><thead><tr>${columns.map(([key,label]) => `<th scope="col" class="${key === 'activity' ? 'ft-state-cell' : key === 'cents' ? 'ft-money' : ''}" aria-sort="${key === sortKey ? descending ? 'descending' : 'ascending' : 'none'}"><button class="cursor-interaction" data-sort="${key}" aria-label="Sort by ${label}" data-tooltip="Sort by ${label}">${key === 'activity' ? '<i data-lucide="circle-dot" aria-hidden="true">◉</i>' : label + `<span class="ft-sort-mark" aria-hidden="true">${key === sortKey ? descending ? '↓' : '↑' : '↕'}</span>`}</button></th>`).join('')}</tr></thead><tbody>${sorted(list).map(row).join('')}</tbody></table>${list.length ? '' : '<div class="ft-empty">No matching transactions.</div>'}</div></section>`;
+    }
+    function render() {
+      root.style.setProperty('--ft-row-padding', settings.density === 'Compact' ? '9px' : '15px');
+      amalgamateInput.checked = !split;
+      customDates.hidden = selectedRange !== 'custom';
+      root.querySelectorAll('[data-range]').forEach(button => button.setAttribute('aria-pressed',String(button.dataset.range === selectedRange)));
+      const range = bounds();
+      const invalidRange = !range.from || !range.through || range.from > range.through;
+      filterError.hidden = !invalidRange;
+      filterError.textContent = invalidRange ? 'Choose a valid start date on or before the end date.' : '';
+      const visible = visibleRecords();
+      tableHost.innerHTML = split
+        ? table('Not approved',visible.filter(r => !r.approved)) + table('Approved',visible.filter(r => r.approved))
+        : table('All transactions',visible);
+      icons();
+    }
+    function announce(message) { announcement.textContent = message; }
+    function validateAmount(text,r) {
+      const match = /^(-?)(\d+)(?:\.(\d{1,2}))?$/.exec(text.trim());
+      if (!match) return null;
+      const whole = BigInt(match[2]) * 100n + BigInt((match[3] || '').padEnd(2,'0'));
+      const value = Number(match[1] ? -whole : whole);
+      if (!Number.isSafeInteger(value) || (r.treatment === 'Spending' && value < 0) || (r.treatment === 'Merchant refund' && value > 0)) return null;
+      return value;
+    }
+    function closeDetail() {
+      const id = activeID;
+      detailHost.hidden = true;
+      detailHost.innerHTML = '';
+      shell.style.minHeight = '';
+      activeID = null;
+      root.querySelector(`[data-action="edit"][data-id="${id}"]`)?.focus();
+    }
+    function fitDetail() {
+      shell.style.minHeight = '';
+      if (settings.details === 'Detail sheet' && !detailHost.hidden) {
+        shell.style.minHeight = Math.max(shell.scrollHeight,detailHost.scrollHeight + 60) + 'px';
+      }
+    }
+    function showDetail(id,discuss=false) {
+      const r = records.find(r => r.id === id);
+      if (!r) return;
+      activeID = id;
+      const discussionStatus = r.discussion === 'pending' ? 'Waiting for export to ChatGPT' : r.discussion === 'inProgress' ? 'Discussion in progress · illustrative state' : 'No discussion request';
+      detailHost.className = settings.details === 'Detail sheet' ? 'ft-shade' : 'ft-inline';
+      detailHost.hidden = false;
+      detailHost.innerHTML = `<section class="ft-detail" ${settings.details === 'Detail sheet' ? 'role="dialog" aria-modal="true"' : ''} aria-label="Transaction details">
+        <div class="ft-detail-head"><div><h3>${discuss ? 'Discuss transaction' : 'Transaction details'}</h3><div class="ft-secondary">${escape(r.merchant)} · ${escape(r.source)}</div></div><button class="ft-done cursor-interaction" data-close>Done</button></div>
+        <div class="ft-fields">
+          <label class="ft-field">Date<input type="date" data-field="date" value="${r.date}"></label>
+          <label class="ft-field">Amount<input inputmode="decimal" data-field="cents" value="${amountInput(r.cents)}"></label>
+          <label class="ft-field ft-wide">Merchant<input data-field="merchant" value="${escape(r.merchant)}"></label>
+          <label class="ft-field">Source<input value="${escape(r.source)}" readonly aria-label="Source, original import metadata"></label>
+          <label class="ft-field">Category<select data-field="category">${categories.map(c => `<option ${c === r.category ? 'selected' : ''}>${escape(c)}</option>`).join('')}</select></label>
+          <label class="ft-field ft-wide">Tags · separated by semicolons<input data-field="tags" value="${escape(r.tags.map(t => t.label).join('; '))}"></label>
+        </div>
+        ${r.question ? `<div class="ft-context"><div class="ft-context-label">Assistant question</div>${escape(r.question)}</div>` : ''}
+        <label class="ft-field ft-wide" style="margin-top:14px">Your note to ChatGPT<textarea data-field="note">${escape(r.note)}</textarea></label>
+        <div class="ft-detail-actions"><span class="ft-subtitle" data-discussion-status>${discussionStatus}</span><button class="cursor-interaction" data-request ${eligible(r) ? '' : 'disabled'}>Request discussion</button></div>
+        <div class="ft-detail-status" data-detail-status role="status" aria-live="polite">Changes here affect this preview only.</div>
+      </section>`;
+      detailHost.querySelector('[data-close]').addEventListener('click',closeDetail);
+      detailHost.querySelectorAll('[data-field]').forEach(input => input.addEventListener('input',() => {
+        const field = input.dataset.field;
+        let next = input.value;
+        if (field === 'cents') next = validateAmount(next,r);
+        if (field === 'date' && !/^\d{4}-\d{2}-\d{2}$/.test(next)) next = null;
+        if (field === 'merchant' && !next.trim()) next = null;
+        if (field === 'tags') {
+          const labels = [...new Set(next.split(';').map(t => t.trim()).filter(Boolean))];
+          next = labels.length <= 20 && labels.every(t => t.length <= 80)
+            ? labels.map(label => r.tags.find(t => t.label === label) || {label,origin:'user'}) : null;
+        }
+        const status = detailHost.querySelector('[data-detail-status]');
+        if (next === null) {
+          input.setAttribute('aria-invalid','true');
+          status.className = 'ft-detail-status ft-error';
+          status.textContent = 'Unfinished or invalid input; the last valid preview value is retained.';
+          return;
+        }
+        input.removeAttribute('aria-invalid');
+        const changed = JSON.stringify(next) !== JSON.stringify(r[field]);
+        if (changed) {
+          r[field] = next;
+          if (field !== 'note') r.approved = false;
+          if (field === 'category' || field === 'merchant') r.origin = 'user';
+          edited.add(r.id);
+          render();
+          save();
+        }
+        status.className = 'ft-detail-status';
+        status.textContent = changed ? 'Saved in preview · changed this session' : 'No change';
+      }));
+      detailHost.querySelector('[data-request]').addEventListener('click',() => {
+        const status = detailHost.querySelector('[data-detail-status]');
+        if (detailHost.querySelector('[aria-invalid="true"]')) {
+          status.textContent = 'Finish the invalid field before requesting discussion.';
+          return;
+        }
+        if (!r.note.trim()) {
+          status.textContent = 'Add your own note before requesting discussion.';
+          detailHost.querySelector('[data-field="note"]').focus();
+          return;
+        }
+        if (!eligible(r)) return;
+        r.discussion = 'pending';
+        edited.add(r.id);
+        render(); save();
+        detailHost.querySelector('[data-discussion-status]').textContent = 'Waiting for export to ChatGPT';
+        status.textContent = 'Discussion requested in preview; nothing was sent to ChatGPT.';
+      });
+      icons(); fitDetail();
+      detailHost.querySelector(discuss ? '[data-field="note"]' : '[data-close]').focus();
+    }
+    tableHost.addEventListener('click',event => {
+      const header = event.target.closest('[data-sort]');
+      if (header) {
+        const next = header.dataset.sort;
+        descending = next === sortKey ? !descending : next === 'date' || next === 'cents';
+        sortKey = next; render(); save();
+        root.querySelector(`[data-sort="${sortKey}"]`)?.focus();
+        return;
+      }
+      const button = event.target.closest('[data-action]');
+      if (!button || button.disabled) return;
+      const r = records.find(r => r.id === button.dataset.id);
+      if (!r) return;
+      if (button.dataset.action === 'approve') {
+        if (!r.approved && (!eligible(r) || r.posting !== 'Posted')) return;
+        r.approved = !r.approved;
+        r.discussion = null;
+        edited.add(r.id);
+        render(); save();
+        announce(r.merchant + (r.approved ? ' approved.' : ' reopened for review.'));
+        root.querySelector(`[data-action="approve"][data-id="${r.id}"]`)?.focus();
+      } else showDetail(r.id,button.dataset.action === 'discuss');
+    });
+    amalgamateInput.addEventListener('change',() => { split = !amalgamateInput.checked; render(); save(); });
+    searchInput.addEventListener('input',render);
+    root.querySelectorAll('[data-range]').forEach(button => button.addEventListener('click',() => {
+      if (button.dataset.range === 'custom' && selectedRange !== 'custom') {
+        const current = bounds();
+        fromInput.value = current.from;
+        throughInput.value = current.through;
+      }
+      selectedRange = button.dataset.range;
+      render(); save();
+    }));
+    [fromInput,throughInput].forEach(input => input.addEventListener('input',() => { render(); save(); }));
+    detailHost.addEventListener('click',event => { if (event.target === detailHost && settings.details === 'Detail sheet') closeDetail(); });
+    root.addEventListener('keydown',event => {
+      if (detailHost.hidden || settings.details !== 'Detail sheet') return;
+      if (event.key === 'Escape') { closeDetail(); return; }
+      if (event.key === 'Tab') {
+        const controls = [...detailHost.querySelectorAll('button:not(:disabled),input:not(:disabled),select,textarea')];
+        const first = controls[0], last = controls[controls.length-1];
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+      }
+    });
+    applySaved(window.openai?.widgetState);
+    render();
+    window.addEventListener('openai:set_globals',event => {
+      if (event.detail?.globals?.widgetState) { applySaved(event.detail.globals.widgetState); render(); }
+    });
+    if (globalThis.Tweak) {
+      const tweak = new Tweak({container:shell,onChange:() => { render(); if (activeID) showDetail(activeID); save(); }});
+      tweak.addSelect(settings,'density',{label:'Row density',options:['Comfortable','Compact']});
+      tweak.addSelect(settings,'pills',{label:'Color placement',options:['Merchant','Category']});
+      tweak.addSelect(settings,'details',{label:'Detailed view',options:['Detail sheet','Below table']});
+    }
+  })();
+  </script>
+</div>

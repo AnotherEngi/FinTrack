@@ -1,8 +1,12 @@
 # Transaction treatments and review workflow
 
-Implemented in source on 2026-10-24. All 22 portable Swift tests pass on Windows.
-SwiftData migrations, native storage tests, and the iPad UI still require Mac
-execution; syntax parsing on Windows does not establish Apple SDK compatibility.
+Implemented in source on 2026-10-24. All 50 portable Swift tests pass on Windows.
+The user now reports a successful native build and physical-iPad refund edit/
+reopen pass, plus both Mac package suites passing. The four focused iPad checks
+provisionally passed based on the user's report. Those reports predate the new
+tabs and export. Backup/restore and device validation of this batch remain
+outstanding. See [device-verification.md](device-verification.md);
+syntax parsing on Windows alone does not establish Apple SDK compatibility.
 
 ## Transaction meaning
 
@@ -40,6 +44,7 @@ discussed; they cannot be approved until their posting status is resolved.
 | Discuss | Requires the user's own nonblank note or answer; requests discussion and preserves the current approval |
 | Reopen | Makes the transaction Unreviewed and clears discussion |
 | Skip | Saves valid pending input, advances without approval or a review-decision event |
+| Mark reviewing in ChatGPT | Explicitly records the user's workflow state on a requested discussion; preserves approval and creates a review decision, without contacting ChatGPT |
 | Note/answer edit | Preserves approval and discussion |
 | Category, tags, Exceptional Event, amount, payee, dates, posting, or treatment change | Reopens approval; retains discussion while the transaction remains reviewable |
 | Change to an excluded treatment | Makes approval Not applicable and clears discussion |
@@ -60,8 +65,23 @@ classification edit does not reapprove the record. Global exchange-level
 deduplication and cross-record operation reconciliation remain future work.
 
 These are local review actions. Discuss does not contact ChatGPT, and a local
-decision is not an upload or remote processing receipt. Initial manual packet
-exchange still needs implementation.
+decision is not an upload or remote processing receipt. Selected-record manual
+packet export is implemented; returned suggestion import is not. See
+[chatgpt-export.md](chatgpt-export.md).
+
+Existing discussion flags decode as awaiting export. The user can explicitly
+mark a discussion as reviewing in ChatGPT; neither exporting nor app backgrounding
+does so automatically. Approve/Reopen clear discussion progress. Requesting a
+new discussion returns to awaiting export. Table details stay on the selected
+record after an action; the older drilldown/question review flow can still advance.
+
+Category and individual-tag origins are now stored separately from approval.
+Manual classification edits mark only affected origins as user; retained tags
+keep their origins. Approval/reopen does not rewrite provenance. Older missing
+origin/source metadata stays unknown. Source changes reopen approval, while
+note/answer-only changes preserve it. Session markers track successful distinct
+commits/actions for this process, including review decisions, not merely opening
+a record. Table actions cannot bypass an unfinished raw draft.
 
 ## Note ownership and classification controls
 
@@ -113,14 +133,22 @@ Portable tests cover explicit approval, pending/unresolved restrictions, note an
 assistant ownership, classification reopening, discussion, Skip/Reopen, stale and
 repeated actions, sign/tag/catalog validation, spending exclusions and overflow,
 history serialization, and old-record/raw-draft decoding. Existing money/date,
-stable-fixture, and revision tests continue to pass (22 tests total).
+stable-fixture, and revision tests continue to pass. Twelve additional tests cover
+display selection, totals/exclusions, questions/history, and export privacy,
+precision, escaping, determinism, and invalid selections. Sixteen further tests
+cover the table's source/provenance, legacy payloads/drafts, session markers,
+discussion progress, date ranges, and all-column sorting (50 tests total).
 
-Eight Apple persistence tests are authored, including v1 migration preservation,
+Twelve Apple persistence tests are authored, including v1 migration preservation,
 review/comment history after reopening, and action write-failure rollback/retry.
-They have not run. Before real data, run them on Mac and verify the full iPad
-workflow, backup/restore, and migrations using synthetic records.
+The four new tests cover source/provenance/progress reopening, old v2 payload
+compatibility, idempotent example append, and append rollback/retry. The user
+reports earlier FinTrackCore and FinTrackPersistence suites passed on Mac;
+test logs/counts were not supplied. Before real data, verify the full iPad
+workflow, backup/restore, and migration readiness using synthetic records.
 
-Next model work: source/account identities and raw provenance, full taxonomy and
+Next model work: original bank source/account IDs and raw provenance, full taxonomy and
 subcategories/splits, reimbursement accounting, source coverage, and the first
-versioned manual ChatGPT packet round trip. No cloud sync or LLM API billing has
+versioned manual ChatGPT suggestion import following device validation of the
+export. No cloud sync or LLM API billing has
 been added.

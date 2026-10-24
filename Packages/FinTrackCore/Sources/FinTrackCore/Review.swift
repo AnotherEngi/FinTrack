@@ -78,7 +78,7 @@ public struct ReviewCatalog: Sendable {
 }
 
 public enum ReviewAction: String, Codable, CaseIterable, Sendable {
-    case approve, discuss, reopen, skip
+    case approve, discuss, reopen, skip, markDiscussionInProgress
 }
 
 public struct ReviewRequest: Codable, Equatable, Identifiable, Sendable {
@@ -112,9 +112,13 @@ public enum ReviewError: Error, Equatable, LocalizedError {
     case pendingApproval, unresolvedPosting, excludedTreatment, unresolvedTreatment, unresolvedCategory
     case discussionNeedsContext, invalidApproval, invalidHistory, wrongTransaction
     case operationIDReused, invalidCatalog, invalidAmountSign, invalidTags
+    case invalidSource, invalidProvenance, discussionNotRequested
 
     public var errorDescription: String? {
         switch self {
+        case .invalidSource: "Enter a source label of at most 120 characters, without account numbers or credentials."
+        case .invalidProvenance: "Classification provenance does not match this record."
+        case .discussionNotRequested: "Request discussion before marking it as being reviewed in ChatGPT."
         case .pendingApproval: "Pending transactions can be annotated or discussed, then approved after posting."
         case .unresolvedPosting: "Choose the posting status before approving."
         case .excludedTreatment: "Income, payments, statement credits, and transfers are outside spending review."

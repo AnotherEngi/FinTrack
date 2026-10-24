@@ -198,3 +198,100 @@ private enum SimulatedFailure: Error { case diskWrite }
     let reopened = try LocalTransactionRepository(storeURL: url)
     #expect(try reopened.fetchAll().first == approved)
 }
+
+@MainActor
+@Test func sourceProvenanceAndUserTrackedDiscussionSurviveStoreReopen() throws {
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let url = directory.appendingPathComponent("test.store")
+    let original = try SyntheticTableExamples.make(asOf: TransactionDate("2026-10-24"))[2]
+    let repository = try LocalTransactionRepository(storeURL: url)
+    try repository.insert(original)
+    let progressed = try repository.perform(ReviewRequest(transactionID: original.id,
+        expectedRevision: original.revision, action: .markDiscussionInProgress))
+    let reopened = try LocalTransactionRepository(storeURL: url)
+    #expect(try reopened.fetchAll().first == progressed)
+    #expect(progressed.discussionProgress == .reviewingInChatGPT)
+    #expect(progressed.draft.source == original.draft.source)
+    #expect(progressed.classificationProvenance == original.classificationProvenance)
+}
+
+@MainActor
+@Test func oldV2PayloadOpensWithUnknownOriginsWithoutRewritingRecords() throws {
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    let url = directory.appendingPathComponent("test.store")
+    let original = try SyntheticTableExamples.make(asOf: TransactionDate("2026-10-24"))[2]
+    var old = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(original)) as? [String: Any])
+    old.removeValue(forKey: "classificationProvenance")
+    old.removeValue(forKey: "discussionProgress")
+    var oldDraft = try #require(old["draft"] as? [String: Any])
+    oldDraft.removeValue(forKey: "source")
+    old["draft"] = oldDraft
+    let payload = try JSONSerialization.data(withJSONObject: old)
+    try autoreleasepool {
+        let schema = Schema(versionedSchema: LedgerSchemaV2.self)
+        let config = ModelConfiguration("FinTrack", schema: schema, url: url, cloudKitDatabase: .none)
+        let container = try ModelContainer(for: schema, configurations: [config])
+        let context = ModelContext(container)
+        context.autosaveEnabled = false
+        let row = try LedgerSchemaV2.StoredTransaction(original)
+        row.payload = payload
+        context.insert(row)
+        try context.save()
+    }
+    try Data(Money.amountSignConvention.utf8).write(to: url.appendingPathExtension("amount-sign"))
+    let repository = try LocalTransactionRepository(storeURL: url)
+    let restored = try #require(repository.fetchAll().first)
+    #expect(restored.id == original.id)
+    #expect(restored.revision == original.revision)
+    #expect(restored.draft.amount == original.draft.amount)
+    #expect(restored.draft.notes == original.draft.notes)
+    #expect(restored.draft.source == nil)
+    #expect(restored.classificationProvenance == .init())
+    #expect(restored.discussionProgress == .awaitingExport)
+    #expect(restored.reviewHistory == original.reviewHistory)
+}
+
+@MainActor
+@Test func appendedTableExamplesAreIdempotentAndPreserveManualEdits() throws {
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let url = directory.appendingPathComponent("test.store")
+    let repository = try LocalTransactionRepository(storeURL: url)
+    let earlier = try SyntheticTransactions.make()[0]
+    try repository.insert(earlier)
+    #expect(try repository.addSyntheticTableExamples(asOf: TransactionDate("2026-10-24")) == 12)
+    let sample = try #require(repository.fetchAll().first { $0.id != earlier.id })
+    var draft = sample.draft
+    draft.notes = "My edited synthetic example"
+    let edited = try repository.update(id: sample.id, expectedRevision: sample.revision, draft: draft)
+    #expect(try repository.addSyntheticTableExamples(asOf: TransactionDate("2026-10-25")) == 0)
+    let reopened = try LocalTransactionRepository(storeURL: url)
+    let rows = try reopened.fetchAll()
+    #expect(rows.count == 13)
+    #expect(rows.first { $0.id == earlier.id } == earlier)
+    #expect(rows.first { $0.id == edited.id } == edited)
+}
+
+@MainActor
+@Test func tableSampleWriteFailureRollsBackEntireAppendAndRetryIsSafe() throws {
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let url = directory.appendingPathComponent("test.store")
+    var failNext = false
+    let repository = try LocalTransactionRepository(storeURL: url, commit: { context in
+        if failNext { failNext = false; throw SimulatedFailure.diskWrite }
+        try context.save()
+    })
+    let original = try SyntheticTransactions.make()[0]
+    try repository.insert(original)
+    failNext = true
+    #expect(throws: SimulatedFailure.diskWrite) {
+        try repository.addSyntheticTableExamples(asOf: TransactionDate("2026-10-24"))
+    }
+    #expect(try repository.fetchAll() == [original])
+    #expect(try repository.addSyntheticTableExamples(asOf: TransactionDate("2026-10-24")) == 12)
+    #expect(try repository.fetchAll().count == 13)
+}

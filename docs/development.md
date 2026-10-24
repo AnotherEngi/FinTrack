@@ -24,7 +24,8 @@ Setup history and current state on this PC:
   setup separately. Do not automatically retry a canceled installer.
 - Subsequent verification found Swift 6.4.1 targeting x86_64-unknown-windows-msvc
   and VS 2022 Developer PowerShell 17.14.42. FinTrackCore now builds and all 22
-  tests pass. No further installer run is currently necessary.
+  tests passed initially; the current table/export batch passes all 50 tests.
+  No further installer run is currently necessary.
 - The agent's inherited PATH was stale. Refreshing it from current Machine/User
   environment settings made Swift available. The restricted shell also denied
   access to the installation directory, so the successful test run used approved
@@ -57,6 +58,20 @@ not enabled automatically.
 The user will update the Mac before it is needed. Confirm the actual versions;
 recommended setup is supported macOS 26.6 or later and stable Xcode 27.x.
 
+The user requested public source access. `AnotherEngi/FinTrack` is now public,
+with owner-only write access verified on 2026-10-24. No GitHub login is required
+to clone/pull it on the work Mac. For a new checkout:
+
+```sh
+git clone https://github.com/AnotherEngi/FinTrack.git
+cd FinTrack
+```
+
+For an existing checkout, run `git pull --ff-only origin main` from that folder.
+Keep GitHub write credentials on the personal Windows PC; the Mac can build a
+public checkout without them. Xcode's Apple-account signing setup is separate.
+Anonymous Git read access was verified against the published main commit.
+
 From the repository root:
 
 ```sh
@@ -73,8 +88,11 @@ open Apps/FinTrack/FinTrack.xcodeproj
 The project has local package dependencies and a shared scheme; no project
 generator or third-party packages are required. It is iPad-only with a provisional
 iPadOS 17 deployment minimum, Swift 6 language mode, and no cloud entitlements.
-The initial source/project was authored on Windows and still needs Xcode compiler
-and project validation. Fix any compiler/project issues before device testing.
+The initial source/project was authored on Windows. The user now reports a
+successful native build and a physical-iPad refund edit/reopen check. Exact current
+tool versions and automated Apple test output have not been supplied. The user
+reports both package test suites passed on Mac; continue
+with the targeted checks in [device-verification.md](device-verification.md).
 
 In Xcode, select FinTrack and an installed iPad simulator, then Run. For the
 physical iPad, select a personal signing team and unique bundle ID under Signing
@@ -85,14 +103,25 @@ inclusion is separate from those capabilities.
 
 ## Tests and device checklist
 
-The 22 portable tests cover the confirmed positive-outflow convention, exact
+For the latest table/export batch, use the single combined Mac/iPad/ChatGPT session
+in [ipad-acceptance.md](ipad-acceptance.md). All 50 portable tests pass on Windows.
+Ten native app/persistence source/test files pass syntax parsing; Apple SDK
+typechecking, navigation, sharing, and the 12 persistence tests need this batch's
+Mac/iPad run. The adapter adds atomic, opt-in example append, and the domain
+payload gains source/provenance/progress fields. SwiftData schema v2 is unchanged.
+Earlier Mac/device reports below cover the preceding prototype.
+
+The original 22 portable tests cover the confirmed positive-outflow convention, exact
 money/date handling, posting/treatment and spending exclusions, explicit
 approval/discussion, classification reopening, comment ownership, Skip/Reopen,
 revision/retry protections, old raw-draft decoding, and serialization/history.
-See [review-workflow.md](review-workflow.md) for exact behavior and limitations.
-Eight Apple persistence tests are authored: sample loading, duplicates/revisions,
+Twelve export/display and sixteen table/model tests bring the total to 50. See
+[review-workflow.md](review-workflow.md) for exact behavior and limitations.
+Twelve Apple persistence tests are authored: sample loading, duplicates/revisions,
 store reopen, write/action rollback and retry, amount-convention guards, and
-v1-to-v2 migration preservation. They have not executed on Mac yet.
+v1-to-v2 migration preservation, old v2 payload compatibility, source/provenance/
+progress reopen, and idempotent/failed example appends. The user reports both
+earlier Mac suites passed; the four new storage tests still need execution.
 Additional native tests cover refusing unmarked earlier stores, unknown amount
 conventions, and orphaned drafts while preserving the original bytes. New stores
 write a positive-outflow convention marker alongside the store. Existing unmarked
@@ -133,8 +162,18 @@ A `.build/debug` symbolic-link warning appeared but did not fail the build/tests
 All eight SwiftData/app source and test files also passed syntax-only
 parsing with Windows swiftc; Apple imports, macros, and types were not checked.
 
-Apple persistence tests, native UI, backup/restore, and migration behavior remain
-**not verified** because no Mac session is available. Earlier static checks
+On 2026-10-24 the user reported that the app builds, and confirmed on the physical
+iPad that an edited sample grocery-refund amount persisted after closing and
+reopening. This verifies that specific user-tested path, not every native feature;
+offline mode and full process termination were not specified. See
+[device-verification.md](device-verification.md).
+
+The user also reports both Mac package suites passed, including the persistence
+suite's migration coverage. The user subsequently said all four focused iPad
+checks appeared to work, covering approval/classification edits, discussion and
+pending restrictions, draft recovery, and offline creation/relaunch. These are
+provisional user-reported passes. Backup/restore remains unverified; the agent
+has no direct Mac session. Earlier static checks
 covered PowerShell syntax, scheme XML, project reference paths, cloud-disabled
 configuration, and whitespace. Windows core-test success does not establish that
 the SwiftData package or iPad app compiles or runs.

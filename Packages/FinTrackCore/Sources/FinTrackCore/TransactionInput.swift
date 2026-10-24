@@ -14,12 +14,15 @@ public struct TransactionInput: Codable, Equatable, Sendable {
     public var tagsText: String
     public var exceptionalEvent: Bool
     public let legacyReviewStatus: LegacyReviewStatus?
+    public var sourceLabel: String
+    public let sourceID: UUID
 
     public init(dateText: String, activityDateText: String = "", payee: String = "",
                 amountText: String = "", notes: String = "", answer: String = "",
                 postingStatus: PostingStatus = .posted, treatment: TransactionTreatment = .unresolved,
                 categoryID: String? = nil, tagsText: String = "", exceptionalEvent: Bool = false,
-                legacyReviewStatus: LegacyReviewStatus? = nil) {
+                legacyReviewStatus: LegacyReviewStatus? = nil,
+                sourceLabel: String = "", sourceID: UUID = UUID()) {
         self.dateText = dateText
         self.activityDateText = activityDateText
         self.payee = payee
@@ -32,6 +35,8 @@ public struct TransactionInput: Codable, Equatable, Sendable {
         self.tagsText = tagsText
         self.exceptionalEvent = exceptionalEvent
         self.legacyReviewStatus = legacyReviewStatus
+        self.sourceLabel = sourceLabel
+        self.sourceID = sourceID
     }
 
     public init(draft: TransactionDraft) {
@@ -39,7 +44,8 @@ public struct TransactionInput: Codable, Equatable, Sendable {
             payee: draft.payee, amountText: draft.amount.decimalText, notes: draft.notes,
             answer: draft.answer, postingStatus: draft.postingStatus, treatment: draft.treatment,
             categoryID: draft.categoryID, tagsText: draft.tags.joined(separator: "; "),
-            exceptionalEvent: draft.exceptionalEvent, legacyReviewStatus: draft.legacyReviewStatus)
+            exceptionalEvent: draft.exceptionalEvent, legacyReviewStatus: draft.legacyReviewStatus,
+            sourceLabel: draft.source?.label ?? "", sourceID: draft.source?.id ?? UUID())
     }
 
     public func value() throws -> TransactionDraft {
@@ -51,14 +57,16 @@ public struct TransactionInput: Codable, Equatable, Sendable {
             amount: Money(decimalText: amountText), notes: notes, answer: answer,
             postingStatus: postingStatus, treatment: treatment, categoryID: categoryID, tags: tags,
             exceptionalEvent: exceptionalEvent, activityDate: activity.isEmpty ? nil : TransactionDate(activity),
-            legacyReviewStatus: legacyReviewStatus)
+            legacyReviewStatus: legacyReviewStatus,
+            source: sourceLabel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil
+                : TransactionSource(id: sourceID, label: sourceLabel.trimmingCharacters(in: .whitespacesAndNewlines)))
         try draft.validate()
         return draft
     }
 
     private enum CodingKeys: String, CodingKey {
         case dateText, activityDateText, payee, amountText, notes, answer, postingStatus
-        case treatment, categoryID, tagsText, exceptionalEvent, legacyReviewStatus
+        case treatment, categoryID, tagsText, exceptionalEvent, legacyReviewStatus, sourceLabel, sourceID
     }
     private enum LegacyKeys: String, CodingKey { case reviewStatus }
 
@@ -77,6 +85,8 @@ public struct TransactionInput: Codable, Equatable, Sendable {
             tagsText: values.decodeIfPresent(String.self, forKey: .tagsText) ?? "",
             exceptionalEvent: values.decodeIfPresent(Bool.self, forKey: .exceptionalEvent) ?? false,
             legacyReviewStatus: values.decodeIfPresent(LegacyReviewStatus.self, forKey: .legacyReviewStatus)
-                ?? old.decodeIfPresent(LegacyReviewStatus.self, forKey: .reviewStatus))
+                ?? old.decodeIfPresent(LegacyReviewStatus.self, forKey: .reviewStatus),
+            sourceLabel: values.decodeIfPresent(String.self, forKey: .sourceLabel) ?? "",
+            sourceID: values.decodeIfPresent(UUID.self, forKey: .sourceID) ?? UUID())
     }
 }

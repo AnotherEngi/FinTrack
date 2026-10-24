@@ -1,7 +1,12 @@
 # FinTrack requirements and implementation plan
 
-Status: initial synthetic prototype source created; native compilation/device validation
-pending. No cloud sync. Updated 2026-10-24.
+Status: synthetic prototype with user-reported native build and physical-iPad
+refund edit/reopen pass and provisional passes for four focused iPad checks.
+The current source batch implements the approved native transaction table, local
+source/provenance/session/discussion support, five tabs, and manual JSON/CSV/prompt
+export; its Mac/iPad validation is pending. Backup/restore and suggestion import
+remain outstanding. No cloud sync.
+Updated 2026-10-24.
 Confirmed constraints below come from the user. Proposed designs remain open until
 selected; documentation verification does not establish account or device access.
 
@@ -22,6 +27,14 @@ Confirmed usage scope: one user, exclusively on their iPad. Multi-user editing a
 editable replicas on other devices are outside version 1. The user requires data
 to be backed up to a cloud and prefers their available Apple iCloud storage.
 Account settings, capacity, and actual backup/restore behavior remain unverified.
+
+Source repository visibility: the user explicitly requested public GitHub access
+so the work Mac can clone/pull without signing into the personal GitHub account.
+On 2026-10-24, `AnotherEngi/FinTrack` was changed to Public. Owner-only write
+access and credential-free Git reads were verified; no collaborators, pending
+invitations, deploy keys, or Actions runs/artifacts were present. Public source
+does not authorize publishing financial records or credentials. Native app
+distribution and subscription integration eligibility remain separate decisions.
 
 ## Existing website reference now available
 
@@ -76,7 +89,7 @@ need explicit sign mapping. The legacy Sheet's two-allocation/one-shared-subcate
 are adapter constraints, not settled native requirements. The current scaffold
 now implements treatment/posting, explicit review actions, and comment ownership.
 The remaining source/provenance, split, reimbursement, coverage, and exchange work
-is not complete; 22 passing core tests do not establish website feature parity.
+is not complete; 50 passing core tests do not establish website feature parity.
 See [review-workflow.md](review-workflow.md) for implemented rules and limits.
 
 User-reported setup:
@@ -98,8 +111,11 @@ its platform support. A major upgrade to macOS 27 is not required solely for thi
 toolchain. Use Xcode's bundled Swift; no standalone Swift update is needed on Mac.
 An older SDK alone does not prove that an app cannot run on a newer device OS;
 actual pairing, signing, installation, and debugging still need a device test.
-The user will complete the updates before Mac work is needed. The updates and
-that test remain pending; do not record the recommended versions as installed.
+The user later reported that the app builds and confirmed a physical-iPad refund
+edit/reopen persistence pass, plus passing FinTrackCore and FinTrackPersistence
+test suites on Mac. Exact updated tool versions and test logs remain unknown;
+do not record recommended versions as installed solely
+from that successful build.
 [Apple Xcode compatibility table](https://developer.apple.com/xcode/system-requirements/).
 
 ## Repository and tool inspection
@@ -141,22 +157,36 @@ validation. Project setup and test commands are in [development.md](development.
   posting/treatment, invented-category selection, tags/Exceptional Event,
   Approve/Discuss/Skip/Reopen with per-record history, separated user/assistant
   fields, recoverable drafts, local saves, exact spending/pending totals, stable
-  IDs/revisions, duplicate-UUID checks, and 24 opt-in synthetic records.
+  IDs/revisions, duplicate-UUID checks, and 24 opt-in synthetic records. The latest
+  batch implements the approved Transactions table with local source aliases,
+  category/tag origins, successful-write session markers, explicitly user-tracked
+  discussion progress, and twelve optional append-only table examples. It also
+  adds Overview, Questions, Review history, and ChatGPT export tabs;
+  category/month drilldowns; display-only tag/event exclusions;
+  shared search/selection rules; and selected-record JSON/CSV/prompt export with
+  optional context, preview, and native sharing. See [chatgpt-export.md](chatgpt-export.md).
 - Tests authored: money/date/review/treatment rules, old draft decoding,
   serialization, revisions/retries, deterministic examples, storage reopen,
-  write/action failure rollback, and v1-to-v2 migration preservation. Native
-  storage/migration tests are not executed yet.
+  write/action failure rollback, and v1-to-v2 migration preservation. The user
+  reports both Mac package suites passed for the preceding build; logs/counts
+  were not supplied. Current coverage is 50 portable tests and twelve authored
+  Apple persistence tests, including four new table-payload/example-append tests.
 - Not implemented: full category/subcategory management, split allocations,
-  source/account provenance, reimbursements, bank imports, coverage/overview,
-  backup export/restore, ChatGPT exchange, or cloud record sync.
+  original bank/account provenance mapping, reimbursements, bank imports, complete-source
+  coverage/comparable-period analytics, backup export/restore, ChatGPT suggestion
+  import, or cloud record sync.
 - Confirmed amount convention: positive expenses, negative refunds/income. The
   prototype uses USD, dot-decimal input, Gregorian dates, explicit approval and
   independent discussion. Additional currency/source-date needs remain open.
   See [data-model.md](data-model.md).
 - Windows Swift setup is now usable: after an initial canceled installation and
-  the user's subsequent setup, FinTrackCore compiled with Swift 6.4.1 and all 22
-  tests passed on 2026-10-24. Apple persistence tests and the native app build have
-  not run. The Mac update and first device build remain pending.
+  the user's subsequent setup, FinTrackCore compiled with Swift 6.4.1 and all 50
+  tests passed on 2026-10-24. The user reports both Mac package suites passed,
+  a successful app build, and a physical-iPad refund
+  edit/reopen pass. The four focused iPad checks provisionally passed according
+  to the user's report. Those native results predate the new export/display
+  batch, which still requires Mac/iPad validation; evidence is tracked in
+  [device-verification.md](device-verification.md).
 
 ## Functional requirements
 
@@ -181,8 +211,23 @@ validation. Project setup and test commands are in [development.md](development.
 | F17 | Filter spending without changing the ledger | Tag/category/Exceptional Event exclusions overlap without double subtraction; flags alone do not exclude expenses |
 | F18 | Track review-processing outcomes honestly | Uploaded feedback remains unprocessed until an explicit processing result; failed/conflicting operations remain recoverable |
 
-Proposed browsing additions: text search and filters for category, tag, review
-status, and outstanding reimbursements. Their exact layout is not yet specified.
+The user approved and locked the refined transaction workspace design on
+2026-10-24: a sortable transaction table, provenance/approval
+pill colors, row actions, a detailed editor, session/discussion indicators, and
+an optional upper non-approved/lower approved split controlled by **Amalgamate**
+(on combines; off splits). Activity moves to a thin leading icon column; row
+actions are equal icon buttons. Search and 1/3/6-month, YTD, past-year, and custom
+date controls belong at the top. The user explicitly prioritizes screen space:
+no in-app branding bar, repeated active-tab heading, standing color legend,
+saved-record/approval counts, or known USD label in this workspace.
+The merchant pill and tags
+follow orange for unaccepted AI suggestions, blue for user edits, and green for
+accepted values. See [transaction design](design/transactions.md) for the layout,
+synthetic preview, preserved rules, and the source/provenance model support.
+The native table is now implemented in source. Local aliases are not complete
+bank provenance, and user-marked discussion progress is not an upload receipt.
+Use [ipad-acceptance.md](ipad-acceptance.md) for the next combined device test.
+Category/tag and outstanding-reimbursement filters remain future refinements.
 
 ## Data integrity and privacy requirements
 
@@ -305,8 +350,9 @@ The documented open-source sign-in flow uses PKCE and an HTTP loopback callback
 at `127.0.0.1` [4]. **Inference:** these desktop-style instructions do not establish
 a supported native iPad flow. Validate mobile callback/lifecycle support and any
 required approval; do not assume a custom URL scheme can replace it. Open-source
-versus private distribution is also unresolved. No need to make the repo public
-as part of this task.
+versus private app distribution is also unresolved. The repository was later made
+public solely at the user's request for anonymous Mac access; this visibility
+change does not establish subscription integration eligibility or choose a license.
 
 The plan-usage preview requires streaming, `store: false`, and explicit request
 context. Persistent conversation reuse and several hosted tools, including file
@@ -323,24 +369,27 @@ Sources:
 6. [Custom MCP server connection](https://developers.openai.com/api/docs/guides/custom-mcp-server).
 7. [Subscription and API pricing distinction](https://learn.chatgpt.com/docs/pricing).
 
-### Initial exchange direction accepted; packet contract still proposed
+### Initial export implemented; suggestion import remains proposed
 
-Export a user-selected range as a versioned review packet: readable CSV plus a
-structured JSON representation for splits, tags, and reimbursements, with a short
-review prompt. Include only explicitly provided categorization rules and context
-needed for the task. The user supplies it to the chosen ChatGPT conversation and
-returns a structured proposal file or pasted proposal text to FinTrack.
-This manual transfer is now explicitly acceptable initially. Prove the round trip
-before broad feature expansion; do not reuse the old Sheet feedback contract
-without reconciling its different authoritative owner, IDs, signs, and revisions.
+Version 1 exports selected saved records as readable CSV, structured JSON, and a
+review prompt. The user can choose dates/review filters/search, select individual
+records, opt in to notes/context, inspect a snapshot, and share/save the files.
+The chosen ChatGPT conversation receives these manually. For now, the user reads
+analysis and makes chosen edits manually in FinTrack. There is no returned-file
+import. Splits and reimbursements are not yet modeled or included. Exact fields,
+privacy behavior, and the combined device check are in
+[chatgpt-export.md](chatgpt-export.md). Manual attachment guidance was rechecked
+against [official OpenAI documentation](https://learn.chatgpt.com/docs/use-chatgpt)
+on 2026-10-24. No model API, subscription sign-in, or cloud record sync was added.
 
-Proposed packet fields: schema version, packet ID, export time/range, stable
-record IDs, base revisions, currency/amount conventions, and relevant category/tag
-definitions. Proposed return fields: packet ID, proposal ID, record ID, expected
-revision, allowed field changes, and rationale. Exact schema and CSV columns are
-still open; an end-to-end synthetic experiment should settle them.
+Export fields now include schema version, packet ID, export time/observed date
+bounds, stable record IDs, base revisions, currency/amount conventions, category
+definitions, and selected transaction fields. Int64 amounts/revisions are decimal
+strings. Proposed return fields remain packet ID, proposal ID, record ID, expected
+revision, allowed field changes, and rationale. A synthetic experiment should
+inform that separate import contract.
 
-FinTrack validates and previews proposals against current records. Accepting an
+The future import must validate and preview proposals against current records. Accepting an
 unchanged record applies an atomic edit; rejecting a suggestion changes nothing.
 Stale revisions require explicit resolution and never overwrite a newer edit.
 Unknown IDs/fields, invalid splits, and repeated proposal IDs are rejected or
@@ -353,7 +402,7 @@ silently replace the store. This exchange works without Google Drive sync.
 | Decision | Proposed next step |
 | --- | --- |
 | Local persistence engine and minimum iPadOS | SwiftData selected for prototype, provisional deployment minimum iPadOS 17; verify saves, migrations, and recovery on Mac/iPad before real-data use |
-| ChatGPT exchange route | Manual file exchange explicitly acceptable initially; settle packet fields/receipts and prove app/chat feedback round trip early. Direct plan sign-in remains a separate feasibility question |
+| ChatGPT exchange route | Version 1 JSON/CSV/prompt export is implemented; validate device sharing, then settle suggestion import/receipts. Direct plan sign-in remains a separate feasibility question |
 | Existing review rules and fields | Handoff/source now reviewed; carry documented behavior into synthetic Swift tests. Actual private taxonomy/current ledger state still needs a separately authorized migration export |
 | Currency, amounts, and dates | Positive-outflow convention confirmed and adopted; test source-specific import mappings and explicit migration of old native stores. Settle posted/activity dates, timezone, and additional currency needs |
 | Categories, splits, review, reimbursements | Explicit approval/discussion rules are implemented; replace prototype catalog with full taxonomy management, decide native allocation/subcategory limits, and design partial repayment matching |
@@ -361,7 +410,7 @@ silently replace the store. This exchange works without Google Drive sync.
 | Household access and future sync | Single user on one iPad confirmed; no multi-device or household sharing in v1. Record sync remains deferred |
 | Recovery and privacy | Apple cloud backup preferred; verify iCloud Backup on device, trial archive export/restore via iCloud Drive, and settle archive format, retention, encryption, redaction, and app lock |
 | Mac/device provisioning | Confirm personal Apple account, developer membership, work Mac constraints, and intended installation method |
-| Distribution / sign-in eligibility | Decide personal/private versus open-source distribution; confirm mobile support before embedding plan usage |
+| Distribution / sign-in eligibility | Source is now public for anonymous Mac pulls; app distribution/license and mobile plan-usage eligibility are still unresolved |
 
 ## Small implementation plan
 
@@ -424,6 +473,11 @@ exports, signing credentials, and personal tool state outside tracked source.
 Access to the work Mac and its policies is unverified; use synthetic data there.
 
 Initial planning validation covered documentation and ignore rules. FinTrackCore
-now builds on Windows and all 22 tests pass with Swift 6.4.1. No Mac session
-was available for Apple persistence or native app verification. See development.md
-for current checks and limitations.
+now builds on Windows and all 50 tests pass with Swift 6.4.1. The user reports a
+successful native build, both Mac package test suites passing, and one physical-iPad
+edit/reopen pass. The four focused iPad checks provisionally passed based on the
+user's report for the preceding build. The new table/export batch passed
+Windows core tests and syntax parsing of ten native app/persistence files; its Mac build, device
+file handoff, and screen checks remain pending, along with backup/restore. The agent
+has no direct Mac session. See development.md and device-verification.md for
+evidence and limitations.
