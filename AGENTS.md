@@ -158,6 +158,11 @@ does not change the requirement to keep financial data and credentials private.
   All 50 core tests pass on Windows. All ten native app/persistence source/test
   files passed syntax parsing only; 12 Apple persistence tests await this batch's
   Mac run. Earlier user-reported Mac/iPad passes predate this batch.
+  The first current-batch Mac attempt stopped in LedgerDisplay.swift with a
+  compiler typechecking timeout, blocking both packages. History and overview
+  expressions have been split into typed loops/separate sorts; all 50 Windows
+  tests passed again. The Mac rerun remains pending. Prefer small typed steps over
+  nested flatMap/map/sorted expressions when evolving these shared projections.
   Follow docs/ipad-acceptance.md for one combined Mac/iPad/ChatGPT session.
   Exports include only selected committed records; notes and assistant context
   require explicit opt-in. Keep Int64 amounts/revisions as strings in the exchange

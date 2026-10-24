@@ -92,19 +92,47 @@ public struct LedgerOverview: Sendable {
             $0.draft.treatment.contributesToSpending && $0.draft.postingStatus != .unresolved
         }
         omittedFromSpendingCount = records.count - spending.count
-        categories = try Dictionary(grouping: spending, by: { $0.draft.categoryID ?? "" })
-            .map { key, group in
-                SpendingBucket(id: "category:" + key,
-                    label: catalog.category(id: key)?.label ?? (key.isEmpty ? "No category" : "Unavailable category: " + key),
-                    recordIDs: group.map(\.id).sorted { $0.uuidString < $1.uuidString },
-                    totals: try SpendingTotals(records: group))
-            }.sorted { $0.label == $1.label ? $0.id < $1.id : $0.label < $1.label }
-        months = try Dictionary(grouping: spending, by: { String($0.draft.date.iso8601.prefix(7)) })
-            .map { key, group in
-                SpendingBucket(id: key, label: key,
-                    recordIDs: group.map(\.id).sorted { $0.uuidString < $1.uuidString },
-                    totals: try SpendingTotals(records: group))
-            }.sorted { $0.id > $1.id }
+        let categoryGroups: [String: [LedgerTransaction]] = Dictionary(grouping: spending) { record in
+            record.draft.categoryID ?? ""
+        }
+        var categoryBuckets: [SpendingBucket] = []
+        for (key, group) in categoryGroups {
+            let label: String
+            if let category = catalog.category(id: key) {
+                label = category.label
+            } else {
+                label = key.isEmpty ? "No category" : "Unavailable category: " + key
+            }
+            let ids = Self.sortedRecordIDs(group)
+            let groupTotals = try SpendingTotals(records: group)
+            let bucket = SpendingBucket(id: "category:" + key, label: label,
+                recordIDs: ids, totals: groupTotals)
+            categoryBuckets.append(bucket)
+        }
+        categoryBuckets.sort { left, right in
+            if left.label == right.label { return left.id < right.id }
+            return left.label < right.label
+        }
+        categories = categoryBuckets
+
+        let monthGroups: [String: [LedgerTransaction]] = Dictionary(grouping: spending) { record in
+            String(record.draft.date.iso8601.prefix(7))
+        }
+        var monthBuckets: [SpendingBucket] = []
+        for (key, group) in monthGroups {
+            let ids = Self.sortedRecordIDs(group)
+            let groupTotals = try SpendingTotals(records: group)
+            let bucket = SpendingBucket(id: key, label: key, recordIDs: ids, totals: groupTotals)
+            monthBuckets.append(bucket)
+        }
+        monthBuckets.sort { left, right in left.id > right.id }
+        months = monthBuckets
+    }
+
+    private static func sortedRecordIDs(_ records: [LedgerTransaction]) -> [UUID] {
+        var ids: [UUID] = records.map { record in record.id }
+        ids.sort { left, right in left.uuidString < right.uuidString }
+        return ids
     }
 }
 
@@ -115,13 +143,18 @@ public struct LedgerHistoryEntry: Identifiable, Sendable {
     public let decision: ReviewDecision
 
     public static func entries(in records: [LedgerTransaction]) -> [Self] {
-        records.flatMap { record in
-            record.reviewHistory.map {
-                Self(transactionID: record.id, currentPayee: record.draft.payee, decision: $0)
+        var entries: [LedgerHistoryEntry] = []
+        for record in records {
+            for decision in record.reviewHistory {
+                let entry = LedgerHistoryEntry(transactionID: record.id,
+                    currentPayee: record.draft.payee, decision: decision)
+                entries.append(entry)
             }
-        }.sorted {
-            $0.decision.createdAt == $1.decision.createdAt ? $0.id < $1.id
-                : $0.decision.createdAt > $1.decision.createdAt
         }
+        entries.sort { left, right in
+            if left.decision.createdAt == right.decision.createdAt { return left.id < right.id }
+            return left.decision.createdAt > right.decision.createdAt
+        }
+        return entries
     }
 }

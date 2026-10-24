@@ -14,6 +14,7 @@ yet been built or exercised on Mac/iPad; see the
 | Portable finance/table/export tests | Pass, agent executed | All 50 tests passed with Windows Swift 6.4.1, including 16 new table/model tests |
 | FinTrackCore tests on Mac | Pass, user reported | User reports the suite passed; test output and counts were not supplied |
 | FinTrackPersistence tests on Mac | Pass, user reported | User reports the suite passed; authored coverage includes migration preservation, reopen, rollback, and retry. Test output and counts were not supplied |
+| Current Mac package compilation | Failed, user reported; source fix prepared | Both suites stopped at the shared Core history expression in LedgerDisplay.swift. History/overview chains were split into typed loops and separate sorts; all 50 Windows tests passed again. Mac rerun is pending |
 | Explicit approval/discussion behavior in UI | Provisional pass, user reported | User said all four focused checks appeared to work; no individual observations/logs supplied |
 | Invalid draft after process termination | Provisional pass, user reported | Included in the user's report that the focused checks appeared to work; no individual observations/logs supplied |
 | Offline physical-device save/relaunch | Provisional pass, user reported | Included in the user's report that the focused checks appeared to work; no individual observations/logs supplied |
