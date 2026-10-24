@@ -1,5 +1,6 @@
 import Foundation
 import FinTrackCore
+import FinTrackPersistence
 
 typealias EditorInput = TransactionInput
 
@@ -84,32 +85,39 @@ extension ReviewAction {
 /// Incomplete input is stored separately from validated ledger records.
 @MainActor
 final class DraftStore {
-    private let directory: URL
+    private let repository: LocalTransactionRepository
 
-    init(directory: URL) throws {
-        self.directory = directory
+    init(directory: URL, repository: LocalTransactionRepository) throws {
+        self.repository = repository
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        if try !repository.workspace().legacyDraftsMigrated {
+            var migrated: [String: Data] = [:]
+            for url in try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
+                where url.pathExtension == "json" {
+                let data = try Data(contentsOf: url)
+                let draft = try JSONDecoder().decode(EditorDraft.self, from: data)
+                guard url.deletingPathExtension().lastPathComponent == draft.id.uuidString else {
+                    throw ExchangeError.invalid("A legacy draft filename does not match its record ID. Its file was preserved.")
+                }
+                migrated[draft.id.uuidString] = data
+            }
+            // Keep the original files as migration evidence; never re-read after migration.
+            try repository.migrateDrafts(migrated)
+        }
     }
 
     func write(_ draft: EditorDraft) throws {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
-        try encoder.encode(draft).write(to: url(for: draft.id), options: .atomic)
+        try repository.saveDraft(id: draft.id, data: encoder.encode(draft))
     }
 
     func remove(id: UUID) throws {
-        let path = url(for: id)
-        if FileManager.default.fileExists(atPath: path.path) {
-            try FileManager.default.removeItem(at: path)
-        }
+        try repository.saveDraft(id: id, data: nil)
     }
 
     func fetchAll() throws -> [EditorDraft] {
-        let files = try FileManager.default.contentsOfDirectory(at: directory,
-            includingPropertiesForKeys: nil).filter { $0.pathExtension == "json" }
-        return try files.map { try JSONDecoder().decode(EditorDraft.self, from: Data(contentsOf: $0)) }
+        return try repository.workspace().drafts.values.map { try JSONDecoder().decode(EditorDraft.self, from: $0) }
             .sorted { $0.createdAt < $1.createdAt }
     }
-
-    private func url(for id: UUID) -> URL { directory.appendingPathComponent(id.uuidString + ".json") }
 }

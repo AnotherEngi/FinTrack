@@ -187,7 +187,7 @@
       { id:'winter', date:'2026-01-16', cents:1825, merchant:'Snowdrop Market', source:'Sample debit', category:'Groceries', origin:'ai', tags:[], approved:false, posting:'Posted', treatment:'Spending', discussion:null, note:'Invented history for date filtering.', question:'' },
       { id:'previous-year', date:'2025-12-11', cents:4750, merchant:'Evergreen Supplies', source:'Sample Mastercard', category:'Household supplies', origin:'user', tags:[{label:'Home',origin:'user'}], approved:true, posting:'Posted', treatment:'Spending', discussion:null, note:'Invented history for date filtering.', question:'' }
     ];
-    const settings = { density:'Comfortable', pills:'Merchant', details:'Detail sheet' };
+    const settings = { density:'Comfortable', details:'Detail sheet' };
     let records = structuredClone(seed);
     let split = true, sortKey = 'date', descending = true, activeID = null;
     let selectedRange = '1m';
@@ -230,7 +230,7 @@
     function save() {
       if (!window.openai?.setWidgetState) return;
       window.openai.setWidgetState({
-        modelContent:{design:'Transaction table',density:settings.density,pillPlacement:settings.pills,detailPresentation:settings.details,amalgamate:!split,datePreset:selectedRange},
+        modelContent:{design:'Transaction table',density:settings.density,pillPlacement:'Category',detailPresentation:settings.details,amalgamate:!split,datePreset:selectedRange},
         privateContent:{amalgamate:!split,selectedRange,customFrom:fromInput.value,customThrough:throughInput.value,sortKey,descending,settings:{...settings}}
       }).catch(() => {});
     }
@@ -245,7 +245,6 @@
       if (columns.some(([key]) => key === state.sortKey)) sortKey = state.sortKey;
       if (typeof state.descending === 'boolean') descending = state.descending;
       if (['Comfortable','Compact'].includes(state.settings?.density)) settings.density = state.settings.density;
-      if (['Merchant','Category'].includes(state.settings?.pills)) settings.pills = state.settings.pills;
       if (['Detail sheet','Below table'].includes(state.settings?.details)) settings.details = state.settings.details;
     }
     function activityScore(r) { return (r.discussion === 'inProgress' ? 4 : r.discussion === 'pending' ? 2 : 0) + (edited.has(r.id) ? 1 : 0); }
@@ -273,8 +272,8 @@
     }
     function row(r) {
       const color = statusFor(r,r.origin);
-      const merchant = settings.pills === 'Merchant' && r.origin ? pill(r.merchant,color) : escape(r.merchant);
-      const category = settings.pills === 'Category' && r.origin ? pill(r.category,color) : escape(r.category);
+      const merchant = escape(r.merchant);
+      const category = r.origin ? pill(r.category,color) : escape(r.category);
       const canApprove = eligible(r) && r.posting === 'Posted';
       const actionLabel = !eligible(r) ? 'N/A' : r.approved ? 'Reopen' : 'Approve';
       const disabled = !r.approved && !canApprove;
@@ -460,7 +459,6 @@
     if (globalThis.Tweak) {
       const tweak = new Tweak({container:shell,onChange:() => { render(); if (activeID) showDetail(activeID); save(); }});
       tweak.addSelect(settings,'density',{label:'Row density',options:['Comfortable','Compact']});
-      tweak.addSelect(settings,'pills',{label:'Color placement',options:['Merchant','Category']});
       tweak.addSelect(settings,'details',{label:'Detailed view',options:['Detail sheet','Below table']});
     }
   })();

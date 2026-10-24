@@ -2,6 +2,37 @@
 
 Updated 2026-10-24. Use synthetic data throughout development.
 
+## Latest review/intake/backup batch
+
+Current verification: **64 portable tests pass** on Windows Swift 6.4.1; all 12
+Apple source/test files pass syntax-only parsing. There are **21** authored Apple
+persistence tests, nine new. Windows has not typechecked SwiftUI/SwiftData or
+validated iCloud folder permission, migration, upload confirmation, or restore.
+See [hardening](hardening.md), [current guide](chatgpt-export.md), and the
+[combined acceptance session](ipad-acceptance.md). Historical counts below refer
+to earlier iterations, not this batch.
+
+Schema V3 reuses the frozen V2 transaction model and adds one persistent workspace
+for pending feedback, packets/results, source links, guidance, and raw drafts.
+Existing draft files migrate once and remain preserved. The live database stays
+local with CloudKit disabled. Automatic backup uses a user-selected iCloud Drive
+folder, remembered via a local security-scoped bookmark; no entitlement/team or
+bundle-ID change is required by this source change. Reuse existing signing.
+
+Run on Mac after transferring the new source:
+
+```sh
+swift test --package-path Packages/FinTrackCore
+swift test --package-path Packages/FinTrackPersistence
+plutil -lint Apps/FinTrack/FinTrack.xcodeproj/project.pbxproj
+open Apps/FinTrack/FinTrack.xcodeproj
+```
+
+Keep the installed store and bundle ID. Do not delete/uninstall/reset data to get
+past a failed migration; preserve error output. Enable the automatic backup folder
+once on iPad, inspect the uploaded file independently, and test restoration from
+that file before real-data use. OS device backup remains an additional layer.
+
 ## Windows setup
 
 `Setup-WindowsSwift.ps1` prepares a stable Swift installation through WinGet.

@@ -16,6 +16,7 @@ public struct TransactionInput: Codable, Equatable, Sendable {
     public let legacyReviewStatus: LegacyReviewStatus?
     public var sourceLabel: String
     public let sourceID: UUID
+    private var originalTags: [String]? = nil
 
     public init(dateText: String, activityDateText: String = "", payee: String = "",
                 amountText: String = "", notes: String = "", answer: String = "",
@@ -46,12 +47,14 @@ public struct TransactionInput: Codable, Equatable, Sendable {
             categoryID: draft.categoryID, tagsText: draft.tags.joined(separator: "; "),
             exceptionalEvent: draft.exceptionalEvent, legacyReviewStatus: draft.legacyReviewStatus,
             sourceLabel: draft.source?.label ?? "", sourceID: draft.source?.id ?? UUID())
+        originalTags = draft.tags
     }
 
     public func value() throws -> TransactionDraft {
-        let tags = tagsText.split(separator: ";").map {
+        let parsed = tagsText.split(separator: ";").map {
             String($0).trimmingCharacters(in: .whitespacesAndNewlines)
         }.filter { !$0.isEmpty }
+        let tags = originalTags.flatMap { tagsText == $0.joined(separator: "; ") ? $0 : nil } ?? parsed
         let activity = activityDateText.trimmingCharacters(in: .whitespacesAndNewlines)
         let draft = try TransactionDraft(date: TransactionDate(dateText), payee: payee,
             amount: Money(decimalText: amountText), notes: notes, answer: answer,
@@ -66,7 +69,7 @@ public struct TransactionInput: Codable, Equatable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case dateText, activityDateText, payee, amountText, notes, answer, postingStatus
-        case treatment, categoryID, tagsText, exceptionalEvent, legacyReviewStatus, sourceLabel, sourceID
+        case treatment, categoryID, tagsText, exceptionalEvent, legacyReviewStatus, sourceLabel, sourceID, originalTags
     }
     private enum LegacyKeys: String, CodingKey { case reviewStatus }
 
@@ -88,5 +91,6 @@ public struct TransactionInput: Codable, Equatable, Sendable {
                 ?? old.decodeIfPresent(LegacyReviewStatus.self, forKey: .reviewStatus),
             sourceLabel: values.decodeIfPresent(String.self, forKey: .sourceLabel) ?? "",
             sourceID: values.decodeIfPresent(UUID.self, forKey: .sourceID) ?? UUID())
+        originalTags = try values.decodeIfPresent([String].self, forKey: .originalTags)
     }
 }

@@ -1,98 +1,80 @@
 # FinTrack
 
-Native SwiftUI iPad household finance app for one user. This is a
-**synthetic-data prototype** with a user-reported successful physical-iPad build
-and refund edit/reopen check. No cloud sync or
-LLM API requests are implemented.
+Native SwiftUI iPad household finance app for one user. Use **synthetic data only**
+until the current Mac/iPad migration, exchange, and backup checks pass. The earlier
+app runs on the physical iPad; the current exchange/backup batch is not device-verified.
+No cloud record sync, bank login, LLM API request, or subscription sign-in is added.
 
 ## Layout
 
-- `Apps/FinTrack/FinTrack.xcodeproj`: iPad app and shared FinTrack scheme.
-- `Packages/FinTrackCore`: portable Swift 6 finance models, exact USD amounts,
-  calendar dates, stable IDs/revisions, synthetic examples, and rule tests.
-- `Packages/FinTrackPersistence`: Apple-only local SwiftData adapter and storage
-  tests, with CloudKit explicitly disabled.
-- `scripts`: optional Windows toolchain setup and portable test runner.
-- `docs`: [requirements](docs/requirements.md), [model decisions](docs/data-model.md),
-  [review workflow](docs/review-workflow.md), [export and display tabs](docs/chatgpt-export.md),
-  [approved table design](docs/design/transactions.md), [combined iPad test](docs/ipad-acceptance.md),
-  [website handoff review](docs/website-handoff-review.md), and
-  [build/verification instructions](docs/development.md).
+- `Apps/FinTrack/FinTrack.xcodeproj`: iPad app and shared scheme.
+- `Packages/FinTrackCore`: portable finance rules, review/weekly/backup contracts,
+  classification guidance, exact money, and synthetic tests.
+- `Packages/FinTrackPersistence`: local SwiftData adapter; CloudKit explicitly off.
+- `scripts`: Windows Swift setup and portable test runner.
+- `docs`: [requirements](docs/requirements.md), [data flows](docs/data-flow-proposal.md),
+  [review and backup guide](docs/chatgpt-export.md), [combined iPad test](docs/ipad-acceptance.md),
+  [design](docs/design/transactions.md), and [development](docs/development.md).
 
-## First prototype
+## Current source
 
-The source provides transaction browsing/search, date ranges, add/edit, explicit
-posting and accounting treatment, category selection, tags, Exceptional Event,
-and Approve/Discuss/Skip/Reopen actions with per-record history. User notes and
-answers are separate from read-only assistant questions/reasons and ledger notes.
-An opt-in action appends twelve current-date table examples without replacing
-existing edits. Earlier stores may still contain the original 24 eight-week
-examples. Valid editor changes explicitly save as input changes;
-incomplete input and failed saves retain a separate recoverable draft. The active
-ledger stays in the iPad app's Application Support directory, eligible for device
-backup. Device/cloud backup has not been verified or enabled by the app.
+Transactions provides sorting, search/date ranges, source aliases, category/tag
+status pills, Amalgamate, detailed editing, notes, tags, and explicit review actions.
+Valid edits persist locally; invalid input is retained as a recoverable draft.
+Optional fictional samples never replace existing edits. Overview, Questions, and
+Review history remain available. Merchant text is always plain.
 
-Five native tabs now provide Overview, Transactions, Questions, Review history,
-and ChatGPT export. Transactions implements the approved sortable table, source
-labels, classification/tag origins, icon actions, search/date presets,
-Amalgamate, and session/discussion indicators. Overview includes category/month drilldowns and display-only
-tag/event exclusions. To export, open **ChatGPT export** (or the export icon in
-Transactions), select records/context, choose **Prepare Export**, then **Save or
-Share All 3 Files**. See the [export guide and combined device checklist](docs/chatgpt-export.md).
-These new SwiftUI screens still require a Mac build and physical-iPad validation.
+**Review & backup** replaces the old selected-record exporter:
 
-Amounts now follow the confirmed positive-outflow convention: expenses are
-positive, refunds and income negative. The prototype supports USD and dot-decimal
-input. Category selection uses an invented catalog; full category/subcategory
-management, splits, reimbursements, bank imports, backup archive export/restore,
-and ChatGPT suggestion import are **not implemented yet**. Do not use real records until save/recovery,
-migrations, and backup/restore have been tested on Apple devices.
+- Review with ChatGPT automatically prepares one JSON file with pending additions,
+  edits, decisions, open questions, relevant context, and classification guidance.
+- Full History Review includes all accepted records. No date/search filter hides work.
+- Import ChatGPT results, explicitly record receipts, and accept/reject individual
+  classification or guidance proposals. Stale proposals cannot replace newer edits.
+- Import structured weekly batches with genuine source IDs, add new rows atomically,
+  and explicitly reconcile source changes or ambiguous purchases.
+- Enable automatic backup by selecting a dedicated **iCloud Drive** folder once.
+  Complete logical snapshots upload there; metadata confirmation is separate from
+  local saves. Pending uploads survive restart. Keep the previous good backup until
+  the new one uploads; automatic older-version history is not required.
+- Full backup export/restore is supplementary. Restore validates and confirms the
+  replacement and preserves a local pre-restore recovery copy.
 
-The earlier website's approval/discussion, note-ownership, and treatment rules now
-have portable implementations and tests. Original bank source identity, full allocation rules,
-and reimbursement accounting still need implementation. Manual file exchange
-with ChatGPT is implemented as JSON/CSV/prompt export; returned suggestions must
-currently be reviewed and entered manually.
-Historical source stays outside the repo; no live ledger has been migrated.
-Older unmarked prototype stores/drafts are preserved and blocked from opening
-until an explicit sign-convention migration is available. New stores include a
-convention marker; existing amounts are never flipped automatically.
-An authored schema v1-to-v2 migration retains old native review flags as history
-without guessing posting/treatment/category or inferring approval. The user reports
-the Mac persistence suite passed. See [review-workflow.md](docs/review-workflow.md).
+The live database stays in Application Support. Schema V3 adds the durable
+workspace without changing V2 transaction fields. Existing draft files migrate
+into the transactional workspace and remain preserved as migration evidence.
+Backups include ledger, drafts, feedback, incoming/results journals, source links,
+and guidance; permission bookmarks stay local. iOS execution/network/storage
+limits can delay backup. No claim of fixed background timing or immediate offline
+cloud protection is made. See the guide for current limits and test steps.
 
-## Run
+Amounts use positive outflows and negative refunds/income, exact USD minor units,
+and dot-decimal entry. Full taxonomy management, splits, reimbursements, arbitrary
+bank-export adapters, and real-history migration remain future work. Existing
+private bank connections have not been accessed or verified. ChatGPT receives
+only files you attach; its separate weekly task does not automatically see them.
 
-On a configured machine:
+## Run on Mac
+
+After transferring source through your normal Git workflow:
 
 ```sh
 swift test --package-path Packages/FinTrackCore
-```
-
-On Mac:
-
-```sh
 swift test --package-path Packages/FinTrackPersistence
 open Apps/FinTrack/FinTrack.xcodeproj
 ```
 
-Choose the FinTrack scheme and an iPad simulator. For a physical iPad, select your
-personal signing team and replace `com.example.FinTrack` with a unique bundle ID.
-No iCloud/CloudKit capability is needed for this prototype. Follow the complete
-[development instructions](docs/development.md) before testing.
+Keep the existing personal signing team and bundle ID. Build/run on the physical
+iPad; do not uninstall or delete its store to resolve a migration failure. No
+CloudKit capability is required for the user-selected iCloud Drive folder.
 
-## Current verification
+Windows can run `scripts/Test-Core.ps1` with the installed Swift/VS tools. Windows
+verification for this batch: all **64** portable tests pass; all 12 Apple source/
+test files pass syntax parsing.
+Windows
+cannot typecheck SwiftUI/SwiftData or verify iCloud behavior. The Apple persistence
+suite has 21 tests, including nine new exchange/migration/recovery cases, awaiting
+this batch's Mac run. See [verification](docs/device-verification.md).
 
-FinTrackCore compiled on Windows using Swift 6.4.1 and **all 50 tests passed**
-on 2026-10-24. The user reports a successful app build and an edited synthetic
-refund amount persisting after closing/reopening on the physical iPad. The user
-also reports both FinTrackCore and FinTrackPersistence tests passed on Mac.
-The four focused iPad checks provisionally passed based on the user's report;
-those reports predate the new table/tabs/export. Ten native app/persistence files
-passed syntax parsing on Windows; Apple SDK typechecking, the twelve-test
-persistence suite, sharing, and screen checks remain for this batch on Mac/iPad.
-Use the [combined checklist](docs/ipad-acceptance.md). Backup/restore remains outstanding.
-See [device-verification.md](docs/device-verification.md) for evidence and next checks.
-
-Keep all real financial files and credentials outside this repository. No source
-changes have been committed or pushed by the agent.
+Keep financial records and credentials out of this public repository. The agent
+has not committed or pushed these changes.

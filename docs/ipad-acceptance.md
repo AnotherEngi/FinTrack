@@ -1,125 +1,135 @@
-# Transaction table and ChatGPT handoff: one iPad session
+# Combined Mac/iPad acceptance: review, intake, and iCloud backup
 
-Source batch prepared 2026-10-24. Use only synthetic records. The approved table
-is implemented in SwiftUI source; it has not yet been built or tested on Mac/iPad.
+Source batch: 2026-10-24. **Synthetic data only.** This replaces the old three-file
+export checklist; those export controls have been superseded, not device-tested.
+Keep the installed app/store and its existing bundle ID. An earlier native build
+and local edit/reopen pass do not validate schema V3, file exchange, or cloud upload.
 
-Windows validation: all **50 FinTrackCore tests passed**, and all ten app/
-persistence source/test files passed syntax parsing. Windows cannot typecheck
-SwiftUI/SwiftData. The persistence suite now has twelve tests; the four new ones
-cover the current payload fields and opt-in example append. Their Mac results
-are pending. Earlier user-reported Mac/device passes cover the earlier app.
+## Build once on Mac
 
-## Transfer and build once
-
-Transfer this source batch through the usual commit/push workflow first. These
-changes have not been committed or pushed by the agent. Then, on the Mac, from
-its FinTrack checkout:
+After transferring the source using the normal Git workflow, from the checkout:
 
 ```sh
 git pull --ff-only
 swift test --package-path Packages/FinTrackCore
 swift test --package-path Packages/FinTrackPersistence
+plutil -lint Apps/FinTrack/FinTrack.xcodeproj/project.pbxproj
 open Apps/FinTrack/FinTrack.xcodeproj
 ```
 
-Run both suites for this batch because the domain payload and persistence
-behavior changed. Build/run the FinTrack scheme on the physical iPad using the
-existing personal signing settings. Keep its installed store; do not uninstall,
-delete a store, or alter the amount-sign marker to make a failed open succeed.
-If a command/build fails, retain the error output so it can be diagnosed.
+Keep personal signing changes, the existing team, and installed bundle ID. Run
+FinTrack on the physical iPad. If migration/build fails, preserve the files and
+error output; do not delete the store, uninstall, or bypass the amount marker.
+The Apple suite now has 21 tests including V2-to-V3 migration, atomic feedback,
+receipts, duplicate source intake, knowledge conflicts, and restore rollback.
 
-## Prepare the synthetic records
+## Existing data, table, and drafts
 
-1. Confirm the earlier modified grocery-refund value still exists. Older August/
-   September examples may be outside the default one-month range: choose Custom
-   and those dates to view them. Unknown source/origin on these earlier records
-   is expected; they must not be labeled as AI or manual by guessing.
-2. Use **Add Synthetic Table Examples** in the toolbar's secondary actions (or
-   the button on an empty/mismatched view). This explicitly appends twelve
-   current-date examples with stable IDs, invented sources, mixed classification
-   origins, pending/approved rows, tags, and discussion states. It preserves
-   existing records and skips any of these examples already present.
-3. Return to **1 month**. Eight of the new examples are in that range. Load the
-   examples again: there should be no duplicates and no overwritten edits.
+- Confirm the previously edited sample refund persists. Use Custom dates for
+  older August/September records. Existing unknown origins stay neutral.
+- Check corrected category/tag pills (orange assistant, blue user, green approved),
+  plain merchants, full-width row backgrounds, and the amount/merchant gutter.
+  Sort/search/date presets and Amalgamate must still work in both orientations.
+- Optionally append the current-date synthetic table examples twice. No duplicate
+  records or overwritten edits should appear. Do not reset existing examples.
+- Edit a valid amount/note/category, relaunch offline, and confirm exact persistence.
+  Notes preserve approval; financial/classification changes reopen it. Pending
+  charges cannot be approved. User and assistant text remain separately owned.
+- Leave invalid input such as `12.`; force-quit/relaunch and resume the exact draft.
+  Existing draft files migrate into the workspace and remain preserved as evidence.
+- Verify Overview, Questions, and Review history still open and show correct records.
 
-These source labels and AI origins are fictional demonstration values. The app
-has no bank connection, model call, ChatGPT login, or automatic processing service.
+## One-file review and a real ChatGPT handoff
 
-## Table, editing, and persistence
+1. Add a fictional transaction, edit another, and mark a question for discussion.
+2. Filter the table so some edited/question records are hidden. Open **Review with
+   ChatGPT** / **Review & backup**, then tap **Review with ChatGPT**. Pending work
+   and open questions must still be included. No date/record/context selection.
+3. Preview and **Share or Save File**. Attach this ONE JSON in your chosen ChatGPT
+   finance conversation. It contains instructions, context, and a return template.
+4. Before importing its response, edit one exported record again. Keep another
+   exported record unchanged. Ask ChatGPT to return classification suggestions
+   for both and a scoped guidance suggestion using its embedded contract.
+5. Save the returned JSON; **Import ChatGPT or Weekly File**. Importing alone must
+   change neither ledger nor approvals. Open the staged result and its summary.
+6. **Record Processing Receipt**. Only included/acknowledged operation IDs clear;
+   your later edit stays pending. Open discussions remain available for follow-up.
+7. Accept the unchanged record's category/tag suggestion: its classification changes,
+   assistant provenance remains, and any financial/classification change reopens
+   approval. Your notes, answers, amount, and source facts remain intact. Reject
+   another suggestion. The stale record's Accept is disabled/rejected.
+8. Import the same response again and repeat its receipt/decision. No duplicate
+   events, altered record, or repeated application should result.
+9. Accept a guidance suggestion. Edit guidance manually, then try an older remaining
+   rule proposal: it must be stale. A new review contains the updated guidance.
+10. Tap **Full History Review** while using a narrow table filter. Its snapshot
+    must contain all accepted records, not only pending/visible rows. No truncation
+    is claimed if file limits are reached. ChatGPT reports any analysis limitations.
 
-- Check portrait and landscape, and light/dark appearance. There is no branding
-  bar, repeated Transactions heading, standing legend, record/approval count, or
-  USD label in the workspace. Status is the thin leading column. The three row
-  actions have equal 44-point targets. Scroll horizontally when space is narrow.
-- Sort each column both ways. Search a merchant, source label, category, and tag.
-  Search should combine with date filtering and work across both groups.
-- Try 1/3/6-month, YTD, past-year, and Custom. Custom includes both endpoint dates
-  and rejects a reversed range. Older examples explain why broader ranges contain
-  additional records; missing history is not a complete-source claim.
-- Toggle **Amalgamate**: on combines rows; off puts non-approved rows above
-  approved rows. Search, dates, and sort should remain in effect.
-- Approve an orange fictional purchase. Its merchant and tags become green and
-  it moves below. Reopen returns it to the upper group with its retained origins.
-  Edit a category: the merchant pill becomes blue. An unchanged older tag retains
-  its own origin, while a newly added tag is blue. Reapprove: all are green.
-- On an approved purchase, change only the note/answer: approval remains. Change
-  amount, category, tags, source, or another classification/financial field:
-  approval reopens. A pending charge and a payment outside spending review cannot
-  be approved. An unsaved draft blocks a table review action.
-- A successful edit/action adds the session pencil. Simply opening a record or
-  making an identical edit does not. Backgrounding or returning from Files keeps
-  it; fully terminating/relaunching clears session markers. Saved records,
-  provenance, approvals, and discussion state remain on disk.
-- Leave an unfinished amount such as `12.`; close/terminate/reopen and resume it
-  from the unsaved-drafts toolbar menu. The exact unfinished input survives while
-  the ledger retains its last valid value. Use invented notes only.
-- Repeat a new manual transaction save and table/export browsing offline. Source
-  labels are local aliases; do not enter account numbers or credentials.
-- Visit Overview, Questions, and Review history in the same session. Category/
-  month drilldowns should open the corresponding records; overlapping tag/event
-  exclusions should hide a record only once. An answered question disappears
-  unless discussion remains requested, and saved review actions appear in history.
+The first packet may include an explicit existing-record baseline. Shared is not
+processed; processed is not approved. Raw unfinished drafts are excluded from
+review files but included in full backups. The separate weekly ChatGPT task has
+not been configured by this app and does not automatically see this conversation.
 
-## ChatGPT handoff on the physical iPad
+## Weekly intake / duplicate and source-update checks
 
-1. On a synthetic row, tap the conversation icon. Add your own note or answer
-   and choose Discuss in the detail sheet. It stays separate from assistant text,
-   preserves approval, and gets a waiting-discussion marker. It is not sent yet.
-2. Search/date-filter to a few rows including that discussion. Tap the export
-   icon above the table. Confirm it starts with just those shown record IDs; you
-   can deselect individual rows.
-3. First leave context switches off and prepare an export. Inspect JSON: notes,
-   answers, and assistant context should be omitted, while local source aliases,
-   classification origins, saved review state, and exact string revisions remain.
-   Close and prepare again with your notes/answers included; optionally include
-   the synthetic assistant context too.
-4. Use **Save or Share All 3 Files → Save to Files**, choosing a folder in iCloud
-   Drive if available. Open the saved JSON, CSV, and prompt text in Files. Also
-   try an individual-file share. Close the export preview: your saved copies must
-   still open. A local save/export is not proof the cloud upload finished.
-5. In the ChatGPT conversation you choose, attach the JSON and prompt text files.
-   CSV is an optional readable companion. Ask ChatGPT to follow the prompt. It
-   should cite the selected transaction IDs/base revisions, keep pending spending
-   separate, and ask for missing context instead of claiming full account coverage.
-6. While reviewing it in ChatGPT, you may explicitly choose **Mark Reviewing in
-   ChatGPT** in the transaction's detail sheet. This persists your own workflow
-   status and changes the activity symbol. Exporting or app switching alone must
-   not mark it in progress. This is not a server receipt or live processing signal.
-7. Give ChatGPT invented feedback in the conversation. Ask it to incorporate the
-   feedback into its recommendations while keeping your words separate from
-   assistant reasoning. Review a proposed classification/tag change and enter it
-   manually in FinTrack. It should show blue and remain unapproved until you
-   explicitly approve it. Relaunch and confirm the chosen edit and source remain.
-8. Export the chosen rows again: the updated revision, values, and discussion
-   state should be visible. FinTrack does not import a returned suggestion file
-   yet; no chat response can silently apply a change or approve a record.
+Copy `fixtures/exchange/weekly-synthetic.json` to a private test location available
+on iPad. Import it through **Import ChatGPT or Weekly File**.
 
-Manual file attachments were rechecked against
-[official ChatGPT documentation](https://learn.chatgpt.com/docs/use-chatgpt) on
-2026-10-24. This uses the user's existing session and its upload/usage limits;
-FinTrack introduces no separately billed model API request.
+- Check coverage and two fictional records. **Add All New Transactions** adds
+  both atomically; importing/accepting again adds none. Pending remains pending.
+- Edit an imported record's notes/tags. Reimporting must preserve those edits.
+- For source-update testing, make a private synthetic copy with a NEW batch UUID,
+  the SAME source identity, and changed amount/posting/date. Review it explicitly;
+  no silent update occurs. Apply facts to the existing record, keeping manual
+  notes/category/tags and reopening approval as appropriate.
+- For a pending charge receiving a new provider ID, explicitly reconcile the new
+  source identity to its existing record. Verify one record with both source links.
+- For a matching manual purchase, batch addition stops without partial writes.
+  Reconcile the matching row or explicitly choose **Add as a Separate Purchase**.
+- Invalid amounts, duplicate source IDs, unknown fields, reused file IDs with
+  changed contents, malformed JSON, or wrong packet/revision must fail visibly.
+  Never invent IDs to make a real connector fit this fixture.
 
-Report any build/test failure first, then any table or handoff step that differed
-from the expected behavior. Record completed results in
-[device-verification.md](device-verification.md). Backup/restore remains required
-before using real financial records.
+## Automatic iCloud backup (required)
+
+1. Under **Review & backup**, **Enable Automatic iCloud Backup**. Select a dedicated
+   folder inside iCloud Drive. Test rejection of On My iPad/a non-iCloud provider.
+2. Wait for **Backed up to iCloud**, not just successful file creation. Confirm the
+   uploaded JSON exists from a separate iCloud client, such as Files on your Mac.
+   Check the generation/content against the current synthetic data. Never infer
+   remote completion from the local folder listing alone.
+3. Edit a fictional record, then leave the app open. Without Export/Share, a new
+   complete backup uploads; its confirmation supersedes the previous snapshot.
+   Normally one confirmed file remains; a second exists while replacement uploads.
+4. Enable airplane mode. Edit a record and leave an unfinished draft. Local saves
+   continue; the app must not claim the new state is cloud-backed. Force-quit and
+   relaunch offline, reconnect, and return to FinTrack. Pending work retries and
+   eventually confirms, including the draft and latest edits.
+5. Rapid edits during an upload must remain pending until the newest generation
+   confirms. Background/foreground and reselecting the folder must preserve data.
+6. Check expired/revoked folder access, unavailable iCloud, and full storage when
+   feasible without disrupting other data. Failure stays visible; retry/reselect
+   recovers. Never delete unrelated iCloud files to manufacture a failure.
+7. An old complete backup must remain usable while replacement fails. Upload
+   metadata must correspond to the verified pending file before cleanup occurs.
+
+iOS may suspend or force-quit the app; no fixed background schedule or instant
+cloud protection offline is promised. Backup is automatic once the folder is
+configured. OS device backup remains a separate extra layer.
+
+## Restore and final verification
+
+- Export a full synthetic backup. Save it privately, make a distinctive later
+  synthetic edit, and use **Restore Full Backup** to restore the exported file.
+  Confirm the replacement dialog, then verify records/IDs, notes/origins, raw
+  drafts, pending feedback, guidance, source links, and receipt/decision history.
+- Repeat restore from an automatic iCloud backup file. The restored state should
+  queue a fresh automatic backup. Do not rely only on the manual export test.
+- Cancel restore and try a corrupt/unsupported archive: existing state must survive.
+- Restore retains one private local `BeforeRestore.json` for emergency recovery;
+  no automatic historical cloud archive is required.
+
+Record each Mac/iPad result in docs/device-verification.md. Real-history migration,
+backup correctness, and native file-provider behavior remain unverified until
+these checks are complete. Report any failure with the exact error and step.

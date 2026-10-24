@@ -1,14 +1,37 @@
 # FinTrack requirements and implementation plan
 
-Status: synthetic prototype with user-reported native build and physical-iPad
-refund edit/reopen pass and provisional passes for four focused iPad checks.
-The current source batch implements the approved native transaction table, local
-source/provenance/session/discussion support, five tabs, and manual JSON/CSV/prompt
-export; its Mac/iPad validation is pending. Backup/restore and suggestion import
-remain outstanding. No cloud sync.
+Status: synthetic prototype. Earlier native/iPad passes predate this batch.
+Current source implements the approved table, durable automatic review packets,
+full-history review, incoming receipts/proposals, weekly source-ID intake,
+classification guidance, user-selected-folder automatic iCloud backup, and full
+backup export/restore. Schema V3 migration and these native flows await Mac/iPad
+validation. No cloud record sync or LLM API requests.
 Updated 2026-10-24.
 Confirmed constraints below come from the user. Proposed designs remain open until
 selected; documentation verification does not establish account or device access.
+
+Architecture clarification: the user reports an existing weekly ChatGPT task with
+direct credit-card connections. FinTrack has not accessed or verified it and has
+no weekly intake yet. The user accepts manual attachment initially **with automatic
+packet contents**: pending questions, marked records, manual additions, and edits.
+Repeated record/context selection is not the desired routine review. See
+[ledger, intake, feedback, and knowledge proposal](data-flow-proposal.md) for the
+recommended replacement workflow and current gaps. Its recommendations are open
+implemented by user request, pending Mac/iPad validation. Later selected-range
+export plans below describe the historical prototype and are superseded by
+automatic pending-work and full-history review. See docs/chatgpt-export.md.
+
+The user additionally requires periodic full-history analysis to refine decisions
+and ongoing cloud backup of the main database. Provide full-history review as well
+as routine pending-work packets. Automatic latest-state backup/retry with honest
+local-versus-cloud status is now a design requirement; the current local prototype,
+device-backup eligibility, and manual archives alone do not satisfy it. Automatic
+backup now uses a user-selected iCloud Drive folder with durable upload work and
+metadata confirmation; device validation remains. History-review cadence remains open; no
+instant cloud copy can be promised offline. See the proposal for these additions.
+The user clarified that automatic iCloud backup is critical, but automatic
+retention of older recoverable versions is not required. Manual full export/import
+is a proposed supplementary feature, not a substitute for automatic protection.
 
 ## Context and goal
 
@@ -201,9 +224,9 @@ validation. Project setup and test commands are in [development.md](development.
 | F7 | Track reimbursements | Record an expected reimbursement, partial receipt, and settlement without double-counting the expense or receipt |
 | F8 | Save valid edits immediately and work offline | A saved edit survives termination/relaunch in airplane mode; a failed write is visible and retains the draft |
 | F9 | Import safely and recognize duplicates | Import the same file twice without adding duplicates or replacing manual annotations; surface ambiguous matches |
-| F10 | Exchange records and review suggestions with ChatGPT | Initially use manual selected-range packets; preserve app/chat feedback, preview returned proposals, and apply only explicitly accepted changes |
+| F10 | Exchange records and review suggestions with ChatGPT | Automatically prepare pending feedback/open-context or full-history packets; manually attach one file initially; stage incoming results, explicitly acknowledge receipts, and apply only accepted revision-checked proposals |
 | F11 | Preserve changes during future sync/exchange | A proposal based on an older revision raises a conflict and preserves a later manual edit |
-| F12 | Support Apple cloud backup of authoritative data | On iPad, verify the local store is eligible for device backup, FinTrack is included in the user's iCloud Backup settings, and a test backup completes |
+| F12 | Automatically back up authoritative app state to iCloud (critical) | Verify latest complete state reaches iCloud, pending work survives interruption/offline use, failed uploads retry visibly, and recovery succeeds. Keep the last good backup until replacement completes; automatic older-version retention is not required. Device-backup eligibility alone is insufficient |
 | F13 | Export and restore an independent full backup | Export a dated synthetic archive to iCloud Drive, validate its contents, restore into an isolated test store, and confirm all records and relationships match |
 | F14 | Preserve source identity and accounting treatment | Reimport/migrate without replacing source IDs or metadata; keep posted/pending, spending/refunds, payments/credits/transfers distinct |
 | F15 | Preserve comment ownership | Assistant questions never appear as user-authored notes; old ledger notes remain readable without being overwritten |
@@ -220,7 +243,9 @@ actions are equal icon buttons. Search and 1/3/6-month, YTD, past-year, and cust
 date controls belong at the top. The user explicitly prioritizes screen space:
 no in-app branding bar, repeated active-tab heading, standing color legend,
 saved-record/approval counts, or known USD label in this workspace.
-The merchant pill and tags
+The user corrected the initial merchant-pill wording after the first iPad review:
+**category and tags carry the color; merchants remain plain even when approved**.
+Category and tag pills
 follow orange for unaccepted AI suggestions, blue for user edits, and green for
 accepted values. See [transaction design](design/transactions.md) for the layout,
 synthetic preview, preserved rules, and the source/provenance model support.
@@ -255,8 +280,10 @@ Category/tag and outstanding-reimbursement filters remain future refinements.
   the repo; `.gitignore` only adds protection for known paths and file types.
 - Any later credentials belong in platform credential storage (Keychain on iPad),
   never source code or exchange files. Do not copy Codex login tokens into the app.
-- Export only selected records/fields after a clear preview. Include notes only
-  when selected. Do not fetch conversations, memories, accounts, or financial
+- Routine review includes pending feedback and relevant committed notes/answers
+  automatically with clear pre-share explanation and preview. Full-history review
+  includes every accepted record. Raw drafts remain out of review packets.
+  Do not fetch conversations, memories, accounts, or financial
   files implicitly. AI proposals must pass schema, ID, revision, amount, and
   relationship validation before the user can accept them.
 
@@ -299,7 +326,13 @@ Apple describes automatic daily backup when the iPad is locked, on power, and
 connected to Wi-Fi; setup and actual completion must be checked on the device.
 [Back up iPad](https://support.apple.com/guide/ipad/back-up-ipad-ipad9a74df05xx/ipados).
 
-Proposed app-level recovery feature: a user-initiated **Create Backup** action
+Critical app-level protection: automatically back up the latest complete app state
+to iCloud, with durable retry, honest cloud-completion status, safe replacement,
+and tested recovery. The chosen source implementation uses a bookmarked user-selected iCloud Drive folder; validate it on iPad.
+Automatic historical retention is not required. Device backup remains an
+additional recovery layer rather than the sole protection mechanism.
+
+Proposed supplementary recovery feature: a user-initiated **Create Backup** action
 that exports a dated, versioned full archive through the system file picker to a
 user-selected folder such as `iCloud Drive/FinTrack/Backups`. iCloud Drive is
 available through Files and stores files in the user's iCloud storage.
@@ -310,8 +343,9 @@ database local and never use Drive to synchronize a live database file.
 The full archive must cover records, categories/subcategories, splits, tags,
 notes, review/reimbursement state, IDs/revisions, and import/proposal provenance,
 with a manifest and schema version. Export a consistent logical snapshot rather
-than copying open database files. Keep older snapshots; do not overwrite a single
-file on every edit. Backup archives differ from selected/redacted ChatGPT review
+than copying open database files. Preserve the last good automatic backup until
+its replacement completes; no automatic historical archive is required. Users
+can retain separate manual exports if wanted. Backup archives differ from selected/redacted ChatGPT review
 packets and must not include credentials.
 
 **Restore Backup** must validate the archive, preview its contents, protect the
@@ -324,8 +358,9 @@ with a direct app-level restore path.
 Record completed export time separately from any cloud-upload status the system
 actually exposes. A successful local save or file export does not prove a remote
 copy exists. Offline edits must remain usable if iCloud is disabled, unavailable,
-or full. Automatic archive scheduling, retention, and archive encryption are still
-open decisions; do not promise background uploads on a fixed schedule.
+or full. Automatic backup scheduling/mechanism and archive encryption remain
+open decisions; do not promise background uploads on a fixed schedule. Historical
+retention is not a required automatic feature.
 No CloudKit record sync or custom cloud service is required by this recommendation,
 and no cloud access or backup implementation has been performed in this task.
 
@@ -369,46 +404,53 @@ Sources:
 6. [Custom MCP server connection](https://developers.openai.com/api/docs/guides/custom-mcp-server).
 7. [Subscription and API pricing distinction](https://learn.chatgpt.com/docs/pricing).
 
-### Initial export implemented; suggestion import remains proposed
+### Current manual exchange and backup implementation
 
-Version 1 exports selected saved records as readable CSV, structured JSON, and a
-review prompt. The user can choose dates/review filters/search, select individual
-records, opt in to notes/context, inspect a snapshot, and share/save the files.
-The chosen ChatGPT conversation receives these manually. For now, the user reads
-analysis and makes chosen edits manually in FinTrack. There is no returned-file
-import. Splits and reimbursements are not yet modeled or included. Exact fields,
-privacy behavior, and the combined device check are in
-[chatgpt-export.md](chatgpt-export.md). Manual attachment guidance was rechecked
-against [official OpenAI documentation](https://learn.chatgpt.com/docs/use-chatgpt)
-on 2026-10-24. No model API, subscription sign-in, or cloud record sync was added.
+The selected-range three-file exporter is replaced by one automatically prepared
+review request containing pending feedback, open questions, relevant committed
+context, a knowledge snapshot/version, and an embedded response template. A
+separate Full History Review includes every accepted record. Both use the user's
+chosen ChatGPT session via manual attachment; no LLM API or sign-in is added.
 
-Export fields now include schema version, packet ID, export time/observed date
-bounds, stable record IDs, base revisions, currency/amount conventions, category
-definitions, and selected transaction fields. Int64 amounts/revisions are decimal
-strings. Proposed return fields remain packet ID, proposal ID, record ID, expected
-revision, allowed field changes, and rationale. A synthetic experiment should
-inform that separate import contract.
+Schema V3 stores feedback/manifests, staged incoming files, decisions/receipts,
+source mappings, classification guidance, and raw drafts atomically alongside
+ledger changes. Consecutive unprepared autosaves coalesce; preparation freezes
+operation boundaries, and a receipt cannot erase later work. Imported results
+are validated and require explicit acceptance. Newer revisions/guidance block
+stale changes; file/proposal ID reuse is rejected. Accepted changes cannot write
+user notes, source amounts, or approval through the classification contract.
 
-The future import must validate and preview proposals against current records. Accepting an
-unchanged record applies an atomic edit; rejecting a suggestion changes nothing.
-Stale revisions require explicit resolution and never overwrite a newer edit.
-Unknown IDs/fields, invalid splits, and repeated proposal IDs are rejected or
-flagged. Keep an application history so accepted changes can be inspected and
-undone safely without erasing intervening edits. A returned full ledger must not
-silently replace the store. This exchange works without Google Drive sync.
+Weekly v1 files require genuine provider IDs scoped to source aliases. New clean
+rows can be accepted atomically; ambiguous manual matches and source corrections
+need explicit reconciliation. Original source facts are retained. The actual
+weekly connector and real financial history have not been accessed or verified.
+
+Automatic backup uses one user-selected iCloud Drive folder, remembered through
+a local bookmark. Complete logical snapshots queue durably; upload metadata
+confirms cloud completion. Preserve the previous good file until its replacement
+uploads, then remove it. No automatic older-version archive is required. Full
+export/confirmed restore is supplementary; restore preserves a local recovery copy.
+Backups include drafts and exchange state, but no permission bookmarks/credentials.
+
+See [review/backup guide](chatgpt-export.md), [combined device test](ipad-acceptance.md),
+and [hardening report](hardening.md). All 64 portable tests pass on Windows; 21
+Apple persistence tests and the app build/upload/restore await Mac/iPad validation.
+The 50 MB file limit fails visibly without truncation. Full taxonomy, splits,
+reimbursements, automatic cloud transport to ChatGPT, and real-history migration
+remain future work. No live database is placed in iCloud Drive.
 
 ## Unresolved decisions
 
 | Decision | Proposed next step |
 | --- | --- |
 | Local persistence engine and minimum iPadOS | SwiftData selected for prototype, provisional deployment minimum iPadOS 17; verify saves, migrations, and recovery on Mac/iPad before real-data use |
-| ChatGPT exchange route | Version 1 JSON/CSV/prompt export is implemented; validate device sharing, then settle suggestion import/receipts. Direct plan sign-in remains a separate feasibility question |
+| ChatGPT exchange route | One-file automatic packets, returned proposals, and receipts are implemented in source; validate the synthetic round trip. Direct plan sign-in remains a separate feasibility question |
 | Existing review rules and fields | Handoff/source now reviewed; carry documented behavior into synthetic Swift tests. Actual private taxonomy/current ledger state still needs a separately authorized migration export |
 | Currency, amounts, and dates | Positive-outflow convention confirmed and adopted; test source-specific import mappings and explicit migration of old native stores. Settle posted/activity dates, timezone, and additional currency needs |
 | Categories, splits, review, reimbursements | Explicit approval/discussion rules are implemented; replace prototype catalog with full taxonomy management, decide native allocation/subcategory limits, and design partial repayment matching |
-| Import sources | Choose one initial file format; define source identity, duplicates, pending/posted updates, refunds, and transfers |
+| Import sources | Weekly v1 JSON is implemented; verify the actual collector can supply genuine source identities and coverage. Validate duplicate/pending/posted reconciliation |
 | Household access and future sync | Single user on one iPad confirmed; no multi-device or household sharing in v1. Record sync remains deferred |
-| Recovery and privacy | Apple cloud backup preferred; verify iCloud Backup on device, trial archive export/restore via iCloud Drive, and settle archive format, retention, encryption, redaction, and app lock |
+| Recovery and privacy | Automatic latest-state iCloud backup uses a user-selected folder; verify upload/retry/recovery, and settle format, encryption, redaction, and app lock. Automatic historical retention is not required; manual export/import is supplementary |
 | Mac/device provisioning | Confirm personal Apple account, developer membership, work Mac constraints, and intended installation method |
 | Distribution / sign-in eligibility | Source is now public for anonymous Mac pulls; app distribution/license and mobile plan-usage eligibility are still unresolved |
 

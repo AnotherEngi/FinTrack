@@ -1,123 +1,118 @@
-# ChatGPT export and display tabs
+# ChatGPT review, weekly intake, and automatic iCloud backup
 
-Implemented in source on 2026-10-24. All development records are synthetic.
-Portable rules have 50 passing Windows tests. The native table, new payload
-fields, screens, and system share sheet still require the
-[combined Mac/iPad/ChatGPT check](ipad-acceptance.md).
+Current source batch: 2026-10-24. Synthetic development data only. Mac build,
+SwiftData migration tests, and physical-iPad handoff/upload/restore need validation.
+This guide replaces the former selected-range JSON/CSV/three-file export steps.
 
-## Export on iPad
+## Normal review
 
-1. Open **ChatGPT export**. Choose All history, Last 8 weeks, or a custom inclusive
-   date range. Choose a review filter or search payees, notes, answers, and tags.
-   Alternatively, use the export icon in Transactions to start with just that
-   table's current visible records.
-2. Select/deselect individual records. Both optional context switches start off:
-   **Include your notes and answers** and **Include assistant context and earlier
-   ledger notes**. Turn them on only when that context belongs in the review.
-3. Choose **Prepare Export**, then inspect the record count, observed dates,
-   context settings, prompt, and exact JSON preview.
-4. Choose **Save or Share All 3 Files**. In the iPad share sheet, choose **Save to
-   Files** and a folder, such as one in iCloud Drive. Individual file share
-   actions are available if a destination does not support sharing several files.
-5. In the ChatGPT conversation you choose, attach the JSON and prompt text files.
-   Ask ChatGPT to follow the attached review prompt. CSV is an optional readable
-   companion. You can also select/copy the prompt text from FinTrack's preview.
-6. Review the analysis and make any chosen changes manually in FinTrack.
-   **Suggestion import, automated acceptance, and processing receipts are not
-   implemented.** A returned file cannot yet be opened/applied by FinTrack.
+1. Open **Review & backup**, or the **Review with ChatGPT** action in Transactions.
+2. Tap **Review with ChatGPT**. FinTrack automatically gathers pending additions,
+   edits (including prior/saved values), review decisions, open discussions and
+   unanswered questions, relevant committed records, and classification guidance.
+   Notes and answers are included; unfinished raw drafts are excluded. The first
+   packet establishes existing records as a baseline. Table filters do not limit it.
+3. Optionally inspect the preview. Use **Share or Save File** and attach the one
+   JSON file in your chosen ChatGPT finance conversation. Instructions and a return
+   template are embedded; there are no routine date/record/context choices.
+4. Ask ChatGPT to follow the embedded instructions and return one JSON file. Save
+   that result and use **Import ChatGPT or Weekly File** in FinTrack.
+5. Open the incoming response. **Record Processing Receipt** removes only the
+   acknowledged operation IDs; newer edits remain pending. Accept/reject individual
+   suggestions separately. Newer records/guidance block stale acceptance.
 
-FinTrack makes no model request, authenticates no ChatGPT account, and introduces
-no LLM API usage. The manual workflow uses the user's existing ChatGPT session;
-its account settings and upload/usage limits still apply. The app does not know
-whether a share destination received a file or whether iCloud finished uploading.
-Official documentation confirms attaching spreadsheets and data exports for
-analysis: [Use ChatGPT: attach files](https://learn.chatgpt.com/docs/use-chatgpt).
-This route was rechecked on 2026-10-24. Native subscription sign-in remains a
-separate, unresolved integration option.
+Preparing/sharing a file is not receipt or approval. Open discussions remain
+eligible for the next review even after their operations were acknowledged.
+Resolve discussion using the existing explicit review actions and answer fields.
+Assistant suggestions never populate user-authored notes/answers or approve records.
+Accepted classification changes reopen approval and retain assistant provenance.
+Replays have no additional effect; reused file/proposal IDs with changed scope or
+content are rejected. Rejections/acceptances return as decisions, not manual edits.
 
-## Version 1 export contract
+## Full-history review and guidance
 
-Three UTF-8 files share a randomly generated packet UUID in their names:
+**Full History Review** creates one file containing all accepted records, current
+pending work, and the guidance library. Use it periodically to refine decisions.
+No source/date completeness is inferred. The 50 MB limit rejects oversized files
+visibly rather than silently truncating history; partitioned analysis is future
+work. The inline preview alone is capped at 100 KB, with an explicit message.
 
-| File | Purpose |
-| --- | --- |
-| `review-<packetID>.json` | Exact structured snapshot and category definitions |
-| `transactions-<packetID>.csv` | Readable spreadsheet companion |
-| `review-prompt-<packetID>.txt` | Review instructions, scope, context settings, and limits |
+Add guidance under **Classification guidance**, or open an existing rule to edit/
+delete it. ChatGPT can suggest additions/replacements; accept them explicitly.
+Changing guidance manually invalidates older outstanding rule proposals. Multiple
+proposals from an unchanged response can be accepted sequentially. Rules are scoped
+text, not an automatic merchant-rule execution engine. Each review carries their
+version and the actual guidance, so a new conversation can use them.
 
-JSON has `schemaVersion: 1`, `purpose: fintrack-review-export`, packet ID, UTC
-export time, amount-sign convention, selected-record coverage disclaimer, earliest
-and latest observed transaction dates, privacy options, category definitions, and
-selected saved records. Observed bounds are not proof of continuous coverage.
-The full available category catalog is included so analysis can use valid IDs.
+Manual attachment uses the existing ChatGPT subscription session. No LLM API or
+paid fallback is used. FinTrack cannot access existing chats, memories, bank
+connections, or scheduled tasks. Your separate weekly task needs its current
+instructions/context explicitly; this app does not schedule or configure it.
+[Official OpenAI file guidance](https://learn.chatgpt.com/docs/use-chatgpt).
 
-Each record includes stable UUID, **base revision as a decimal string**, review/
-posted date, optional activity date, payee, **minor units and decimal amount as
-strings**, currency, posting, treatment, category ID, tags, Exceptional Event,
-approval, and discussion state. It now also includes optional local source UUID/
-label, category/individual-tag origins, and explicitly user-tracked discussion
-progress as additive version 1 fields. Source aliases are not bank import
-identities or account numbers. Unknown older source/origin values remain unknown.
-String encoding preserves the full Int64 range
-in JavaScript-based tools. There is no binary floating-point monetary conversion.
-User notes/answers and assistant context are distinct optional fields; when their
-switch is off, those keys and CSV columns are omitted. Their absence means
-context was not provided, not that the user gave an empty answer.
+## Weekly intake
 
-CSV quotes every cell, doubles embedded quotes, and preserves Unicode, commas,
-and multiline text. Text that could be interpreted as a spreadsheet formula is
-prefixed with an apostrophe. Generated monetary numbers retain their sign.
-JSON always retains the original exact text and is the canonical export.
+Import a `fintrack-weekly-intake` JSON file, inspect coverage and the rows, then
+choose **Add All New Transactions**. New identities are added in one transaction;
+existing identities are skipped. Any ambiguous match stops the batch without
+partial additions. Individual rows can be added or reconciled separately.
 
-The export excludes unsaved drafts, action history, internal storage payloads,
-credentials, and unrelated records. Creating it does not save editor drafts,
-change approval, increment revisions, or modify the ledger. A prepared preview
-is a fixed snapshot; close and prepare a new export after later ledger edits.
-Temporary files are created in an app-owned temporary UUID directory and removed
-when the preview is normally dismissed. An interrupted process may leave temporary
-files until the OS cleans them up. Copies saved/shared elsewhere remain there.
+Provider transaction IDs must be genuine, scoped to source aliases. Never invent
+IDs if the weekly collector cannot supply them. For a manual duplicate candidate,
+pending-to-posted identity change, or source correction, choose **Reconcile /
+Separate Purchase** or **Review Source Update**. Select the existing record and
+inspect the before/after facts before applying. User notes/category/tags remain;
+financial/source changes reopen approval. **Add as a Separate Purchase** explicitly
+allows two legitimate purchases with the same date/merchant/amount. Original and
+latest source evidence remain recorded. Guess changes on already imported rows
+should return through classification proposals, not overwrite annotations.
 
-This is an export-only review contract, not the SwiftData serialization format,
-bank import format, future proposal-import contract, or a backup archive.
-Future imports still require validation, explicit acceptance, duplicate protection,
-revision conflicts, persisted outcomes, and safe undo before they can edit records.
+[Weekly synthetic fixture](../fixtures/exchange/weekly-synthetic.json) demonstrates
+the supported shape. This is an adapter contract, not support for arbitrary bank
+CSV files or proof of the user's actual weekly connector's output/completeness.
 
-## Display tabs
+## Automatic iCloud backup
 
-| Tab | Current behavior |
-| --- | --- |
-| Overview | Selected-record posted and pending spending, review counts, category/month totals and record drilldowns; date scope; tag and Exceptional Event exclusions |
-| Transactions | Approved sortable table with leading activity, source/origin pills, equal icon actions, search/date presets, Amalgamate, editor, recoverable drafts, and export of shown rows |
-| Questions | Unanswered assistant questions or explicit discussion requests; optional discussion-only filter; opens the existing editor |
-| Review history | Explicit saved Approve/Discuss/Reopen decisions, action IDs, timestamps, base/applied revisions, and links to current records; filters by **decision date** |
-| ChatGPT export | Date/review/search selection, individual selection, privacy options, snapshot preview, and file sharing |
+1. Tap **Enable Automatic iCloud Backup**. Create/select a dedicated folder inside
+   **iCloud Drive** using Files. On My iPad and other providers are rejected.
+2. This one-time folder permission is remembered. After changes, FinTrack prepares
+   complete logical snapshots and attempts upload automatically while it can run.
+3. Status distinguishes local/pending/error from **Backed up to iCloud**. Only
+   Apple's uploaded-file metadata confirms cloud completion. A last-confirmed
+   snapshot date does not imply that newer local edits reached the cloud.
+4. Offline/interrupted work and the candidate upload survive relaunch. Returning
+   to the app or **Retry Backup Now** retries. Expired permissions require choosing
+   the folder again. Insufficient storage or inaccessible iCloud stays visible.
 
-Overview exclusions affect display only. A record matching multiple exclusions
-is omitted once. Without an explicit exclusion, tags/events do not remove spending.
-Only spending/refund treatments with posted/pending status contribute; unknown
-posting, income, transfers, payments, and credits do not. Categories use the
-prototype's invented catalog. No missing months are filled with zero; there are
-no complete-source claims, projections, or comparison percentages. Overflow
-shows an unavailable-total message rather than a wrapped or rounded result.
+The previous complete backup remains until the replacement uploads. Normally
+there is one confirmed file and at most one pending replacement; old files are
+removed after confirmation. Cleanup failures can leave an extra file and are
+reported. A crash during cleanup can also leave an extra file; there is no
+user-visible automatic historical retention policy. Do not manually edit these
+files or use this folder from a second editable replica.
 
-History names reflect the current payee. The stored action history has no prior
-field snapshots and is not a full edit audit log. Skip produces no decision.
-Questions and discussion do not contact ChatGPT or imply remote processing.
-Reimbursements, full taxonomy/splits, cloud connections, and the old website's
-connection settings are not added by these display tabs.
+The live database is local, CloudKit is disabled, and no extra signing capability
+is added. User-selected-folder backup uses security-scoped bookmarks, coordinated
+file I/O, and NSMetadataQuery upload notifications. It does not rely solely on
+periodic device backup. Apple backup eligibility is retained as another layer.
+No guarantee of uploads while force-quit or of a fixed background schedule is made.
+[Apple directory access](https://developer.apple.com/documentation/uikit/providing-access-to-directories),
+[upload confirmation](https://developer.apple.com/documentation/foundation/urlresourcekey/ubiquitousitemisuploadedkey).
 
-SwiftUI uses Apple's native multi-file
-[ShareLink](https://developer.apple.com/documentation/swiftui/sharelink/init(items:subject:message:label:)-piai).
-No third-party dependencies or cloud capabilities were added. SwiftData schema
-v2 remains unchanged; its domain payload now carries source/provenance/progress.
+## Supplementary full export/restore
 
-## One combined Mac/iPad acceptance session
+**Export Full Backup** creates a private full snapshot; share/save that file.
+**Restore Full Backup** opens either an automatic cloud backup file or a manual
+export, validates it, and asks before replacing current state. One local
+`Application Support/FinTrack/BeforeRestore.json` preserves the pre-restore state;
+this is not an automatic version history. The restore transaction preserves the
+current store on failure and updates backup work for the restored state.
 
-Use [ipad-acceptance.md](ipad-acceptance.md) for the single current checklist.
-It covers the Mac package suites, old-store preservation, the approved native
-table, tab behavior, offline/draft/lifecycle checks, and an actual synthetic
-file handoff with ChatGPT. Keep the existing store. Four new Apple persistence
-tests verify the new payload fields and safe opt-in example append.
+Full backups include raw drafts, ledger IDs/revisions/provenance, pending feedback,
+packet manifests, incoming files, decisions/receipts, source mappings, and guidance.
+They omit folder permission bookmarks and credentials. A review packet is not a
+backup and cannot be imported as one. Files are ordinary private JSON snapshots;
+there is no app-level archive password/encryption feature. Keep them outside Git.
+Prepared share files use app temporary storage and are not a backup destination.
 
-Record results in [device-verification.md](device-verification.md). Backup/restore
-verification remains required before any real-data use.
+Complete the [combined checklist](ipad-acceptance.md) before real-data use.

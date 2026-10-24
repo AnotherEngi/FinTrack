@@ -2,7 +2,10 @@
 
 **Status: approved transaction workspace baseline, 2026-10-24.** The user reviewed
 the refined preview and confirmed, "Looks good. Let's lock that in."
-The approved table is now implemented in SwiftUI source, pending Mac/iPad validation.
+The approved table has now been shown running on the user's iPad. The first
+device review corrected pill placement to category/tags and identified native
+width/spacing and export-discovery refinements; these source fixes await a new
+device check.
 The adjacent `transaction-table.html` is an interactive, synthetic design preview,
 not a replacement app, web architecture decision, or live ledger editor.
 
@@ -16,12 +19,14 @@ Use the current refined preview as the visual reference for native implementatio
 - Amalgamate switch: on combines rows; off separates non-approved above approved.
 - Thin leading activity column with an icon heading; aligned date, amount,
   merchant, source, category, tags, and action columns.
-- Merchant and tag pills use orange for unaccepted assistant suggestions, blue
-  for user edits, and green for approved values regardless of origin.
+- Category and tag pills use orange for unaccepted assistant suggestions, blue
+  for user edits, and green for approved values regardless of origin. Merchant
+  text is always plain, including approved rows. This supersedes the initial
+  merchant-pill interpretation, as explicitly clarified in the first iPad review.
 - Equally sized check/undo, conversation, and pencil action buttons.
 - Comfortable row spacing and a detail sheet for editing, as shown by default.
 
-Earlier preview controls for category-pill placement, compact density, and
+Earlier preview controls for merchant-pill placement, compact density, and
 below-table editing remain exploratory alternatives, not the approved baseline.
 Future user feedback can revise this baseline. Approval settles the visual
 direction. Native implementation now includes local source aliases, category/tag
@@ -50,11 +55,10 @@ Compact presentation still needs usable touch targets and readable text.
   followed by date, amount, merchant, source/card/account, category, tags, and
   row actions. Activity has an icon-only heading and a narrow fixed-width column
   (44px in the preview). Combined activity states share one accessible target.
-- Orange pills identify an unaccepted LLM suggestion; blue identifies a user
-  edit; green identifies an accepted classification regardless of origin.
-  The user's wording places the classification pill around **merchant text**.
-  Tags follow the same color rules. Merchant placement is now the approved choice;
-  the preview's category-placement option is an earlier exploration only.
+- Orange category/tag pills identify an unaccepted LLM suggestion; blue identifies
+  a user edit; green identifies an accepted classification regardless of origin.
+  Merchants are neutral text. The user explicitly corrected the earlier merchant
+  highlight after testing on iPad; the HTML reference now follows that correction.
 - Each row offers equally sized icon-only Approve/Reopen, Discuss, and Edit
   buttons: check mark, return/undo arrow, conversation bubbles, and pencil.
   Accessible names retain the action names and transaction context. Edit opens
@@ -83,7 +87,7 @@ the default view still shows the original eight October records.
 ## Behavior to preserve
 
 Approve is an explicit per-record action covering the current classification and
-tag set. It makes the merchant/category status indicator and existing tag pills
+tag set. It makes the category status indicator and existing tag pills
 green. Reopen restores their underlying provenance colors instead of pretending
 the previously accepted values were authored by the user. Suggestions, editing,
 or comments alone never approve a record.
@@ -105,10 +109,10 @@ write failures, and offline use remain requirements for the eventual SwiftUI vie
 
 | Area | Current app | Required next design/model work |
 | --- | --- | --- |
-| Source column | Optional local source UUID and per-record display label, preserved by the editor/export | Original bank IDs, raw import provenance, a global source catalog, and bank import mapping remain future work |
-| Classification origin | Persisted category and individual-tag origins; affected manual edits become user-origin, approval/reopen retains origins | A future validated suggestion import must provide explicit provenance; older unknown origins stay neutral |
+| Source column | Optional local source UUID and per-record display label; weekly v1 intake adds separate scoped provider IDs and original/latest evidence | Actual bank adapters, real-history migration, and a global source catalog remain future work |
+| Classification origin | Persisted category/tag origins; manual edits become user-origin, accepted assistant proposals retain assistant origin, approval/reopen retains origins | Validate native proposal acceptance; older unknown origins stay neutral |
 | Session marker | Successful distinct saves/actions register in the long-lived ledger model | Validate lifecycle behavior on iPad; never derive it from timestamps alone |
-| Discussion waiting | Existing requests default to awaiting export; explicit Discuss records an action ID | Shared/received/processed receipts are not implemented; export is not a receipt |
+| Discussion waiting | Existing requests default to awaiting export; explicit Discuss records an action ID; open discussions remain in prepared reviews | Imported processing receipts are separate from this flag; sharing is not a receipt |
 | Discussion in progress | An explicit Mark Reviewing in ChatGPT action persists the user's own workflow state | Automatic processing visibility still requires a settled integration |
 
 Implemented session boundary: the current app process lifetime, retaining
@@ -119,8 +123,8 @@ loaded lifetime and marks successful demo edits/review actions.
 
 Unknown historical provenance must stay neutral/unavailable. Do not label all
 unreviewed records orange or infer manual ownership from the current revision.
-In particular, the merchant pill describes **classification provenance/status**;
-it does not claim the bank's original merchant name came from an LLM.
+The category pill describes classification provenance/status. A bank's merchant
+name is not an LLM classification and must not inherit category/approval colors.
 
 ## Preview and validation
 
@@ -131,7 +135,7 @@ in-progress discussion. It has no network/model request or native-store access.
 No real financial records or credentials belong in this preview.
 
 Try column sorting, Amalgamate, search/date filters, Approve/Reopen, Discuss, and Edit. Controls
-for row density, merchant/category color placement, and detail-sheet versus
+for row density and detail-sheet versus
 below-table details are available when the conversation host supports design
 controls. Without them, the defaults follow the supplied direction. Demo edits
 are in memory; only design/sort/grouping preferences may be retained by the host.

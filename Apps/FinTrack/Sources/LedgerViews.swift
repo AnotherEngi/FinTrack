@@ -26,8 +26,22 @@ struct FinTrackRootView: View {
                     ReviewHistoryView(ledger: ledger)
                         .tabItem { Label("Review history", systemImage: "clock.arrow.circlepath") }.tag(WorkspaceTab.history)
                     ReviewExportView(ledger: ledger)
-                        .tabItem { Label("ChatGPT export", systemImage: "square.and.arrow.up") }.tag(WorkspaceTab.export)
+                        .tabItem { Label("Review & backup", systemImage: "arrow.triangle.2.circlepath") }.tag(WorkspaceTab.export)
                 }
+            }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if ledger.startupFailure == nil && ledger.backup?.isCurrent != true {
+                Button { tab = .export } label: {
+                    Label(ledger.backup?.status ?? "Automatic iCloud backup needs attention.", systemImage: "icloud.and.arrow.up")
+                        .font(.caption).frame(maxWidth: .infinity).padding(6)
+                }.background(.thinMaterial)
+            }
+        }
+        .task {
+            while !Task.isCancelled {
+                await ledger.backupNow()
+                do { try await Task.sleep(for: .seconds(30)) } catch { break }
             }
         }
         .alert("FinTrack", isPresented: Binding(

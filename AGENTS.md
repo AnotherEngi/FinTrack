@@ -29,15 +29,21 @@ Current transaction/review behavior and migration limits are documented in
 The user approved and locked the refined transaction table design on 2026-10-24,
 captured in
 [transaction design](docs/design/transactions.md). Preserve its sorting, optional
-approved/non-approved split, merchant/tag status pills, detailed editor, and
+approved/non-approved split, category/tag status pills, detailed editor, and
 independent session/discussion indicators. The HTML preview remains design-only;
 the native table, local source aliases, per-field provenance, process-session
 markers, and explicitly user-tracked discussion progress are now implemented in
-source. Full bank provenance/import and automatic processing receipts remain future work.
-Use the approved preview defaults as the implementation baseline: merchant/tag
+source. The newer review/backup batch below adds a narrow weekly source-ID intake
+contract and manually imported processing receipts; arbitrary bank adapters and
+automatic ChatGPT transport remain future work.
+The user corrected pill placement after the first iPad review: **only category
+and tags are colored; merchant text is always plain, including approved rows**.
+This correction supersedes the earlier merchant-pill interpretation.
+Use the approved preview defaults as the implementation baseline: category/tag
 status pills, comfortable rows, and a detailed edit sheet. Earlier preview
 alternatives are exploratory, not the approved layout. This approval records the
-design decision. The native implementation still requires Mac/iPad validation;
+design decision. The user has now shown the native table running on iPad; its
+color/width/gutter/export-discovery refinements still need a new device check;
 see docs/ipad-acceptance.md for the combined table/export/ChatGPT test session.
 Standing UI decision: protect screen space. Do not put a FinTrack branding/header
 bar on working screens or repeat an active tab name as a page heading. The
@@ -59,8 +65,10 @@ does not change the requirement to keep financial data and credentials private.
 - Add and edit transactions, categories, subcategories, splits, and tags.
 - Track notes, review status, and reimbursements.
 - Persist valid edits immediately and operate offline.
-- Keep authoritative app data eligible for iCloud device backup and plan a
-  separate app-level backup/restore archive exportable to iCloud Drive.
+- Automatic iCloud backup of the latest complete authoritative app state is
+  critical. Device-backup eligibility alone is insufficient. Automatic retention
+  of older versions is not required; manual full export/import is a proposed
+  supplementary recovery feature. Choose and validate the backup mechanism.
 - Preserve user changes during future exchange/sync and handle duplicate imports.
 - Exchange selected data and suggested changes with the existing ChatGPT workflow.
 - Keep core record management usable without ChatGPT or a network connection.
@@ -80,6 +88,10 @@ does not change the requirement to keep financial data and credentials private.
   backup-file export fit the proposed local-first design. Keep the live database
   local; do not place it in iCloud Drive. Do not promise every saved edit is
   already backed up or that an exported file has finished uploading.
+  The user subsequently authorized automatic **backup** through a user-selected
+  iCloud Drive folder. This is implemented in source with remembered folder
+  permission and upload-metadata confirmation; it does not authorize record sync,
+  a live cloud database, CloudKit, or a hosted bridge.
 - The user explicitly confirmed after reviewing the handoff that manual file
   exchange with ChatGPT is acceptable initially. Prove a synthetic round trip
   early; do not assume that Apple cloud backup gives ChatGPT access to records.
@@ -98,13 +110,41 @@ does not change the requirement to keep financial data and credentials private.
 
 ## Implementation guidance
 
+- The user clarified the four data flows on 2026-10-24: their existing ChatGPT
+  task retrieves card transactions weekly; FinTrack needs intake, durable app
+  feedback, and recoverable classification knowledge around the accepted ledger.
+  These private connections were reported, not accessed or verified. The user
+  accepts manual attachment initially with automatically prepared contents.
+  Routine review must gather pending marked/added/modified work without repeated
+  record/context selection. See [data-flow proposal](docs/data-flow-proposal.md)
+  for the proposed architecture, current implementation gaps, and open choices.
+  The user subsequently requested implementation. Manual file transport and a
+  one-time user-selected iCloud Drive backup folder are implemented in source;
+  Mac/iPad validation remains. Cloud record sync and automatic ChatGPT transport
+  remain excluded.
+  Snapshot export and process-session markers are not a durable feedback queue.
+- The user also requires periodic full-history ChatGPT review and ongoing cloud
+  backup, beyond routine pending feedback and manual backup export. Design for
+  full-history snapshots and automatic latest-state backup/retry with visible pending,
+  failed, and cloud-confirmed status. Source now implements these with manual
+  full-history review and user-selected iCloud Drive folder backup. Actual upload,
+  permission renewal, migration, and recovery need Mac/iPad validation; offline
+  edits cannot have immediate cloud protection. Automatic history-review cadence
+  is not implemented; do not implement cloud record sync on this basis.
+  The user clarified that automatic historical backup retention is not required.
+  Preserve the last good cloud backup until its replacement is complete; this is
+  safe replacement, not a requirement for a user-visible version archive.
+
 - The user approved proceeding with the local-first prototype. It now uses
   local-only SwiftData. The user reports both Mac package test suites passed;
   the four focused iPad checks provisionally passed based on the user's report.
   Backup/restore validation remains before real-data use.
-  Cloud backup requirements remain; backup archive export/restore
-  is not implemented. Manual ChatGPT export is implemented; suggestion import
-  and direct subscription sign-in remain future work. See docs/chatgpt-export.md.
+  Latest source adds schema V3 durable feedback/manifests, incoming response and
+  weekly staging, source-ID reconciliation, explicit proposal decisions/receipts,
+  editable guidance, automatic iCloud folder backup, and full backup export/restore.
+  Drafts migrate from old files into the workspace atomically; original files are
+  preserved as evidence. Ledger changes and feedback/draft updates commit together.
+  Direct subscription sign-in remains future work. See docs/chatgpt-export.md.
 - Favor a small Swift package for portable finance rules and exchange contracts,
   with SwiftUI and the selected Apple persistence adapter outside that package.
 - Use stable record IDs, exact monetary arithmetic (never binary floating point
@@ -126,6 +166,14 @@ does not change the requirement to keep financial data and credentials private.
   bank import deduplication. Missing history coverage must not become zero spend.
 
 ## Validation and environment
+
+- Current review/backup batch: all **64** portable tests pass on Windows Swift
+  6.4.1. Hardening results are recorded
+  in docs/device-verification.md. Twelve Apple source/test files pass Windows
+  syntax parsing only. There are 21 Apple persistence tests (nine new); run them
+  and the Xcode build on Mac. Verify iCloud permission, metadata confirmation,
+  retries, and full restore on iPad before real data. The older test counts below
+  are historical evidence, not validation of schema V3 or cloud backup.
 
 - Always set the shell working directory explicitly to this repository. This
   environment's default shell directory did not match the supplied workspace.
@@ -150,7 +198,7 @@ does not change the requirement to keep financial data and credentials private.
   force-quit draft recovery, and offline creation/relaunch. Treat these as
   provisional passes. See docs/device-verification.md; keep user reports
   distinct from agent-executed test results.
-- The latest batch implements the approved native Transactions table alongside
+- The earlier table batch implements the approved native Transactions table alongside
   Overview, Questions, Review history, and ChatGPT export. SwiftData schema v2 is
   unchanged; its domain payload gains backward-compatible optional source,
   classification-provenance, and discussion-progress fields. Old fields default
@@ -161,12 +209,17 @@ does not change the requirement to keep financial data and credentials private.
   The first current-batch Mac attempt stopped in LedgerDisplay.swift with a
   compiler typechecking timeout, blocking both packages. History and overview
   expressions have been split into typed loops/separate sorts; all 50 Windows
-  tests passed again. The Mac rerun remains pending. Prefer small typed steps over
+  tests passed again. The user subsequently showed the native app running on iPad;
+  the current standalone package-test results are not explicitly reported.
+  Prefer small typed steps over
   nested flatMap/map/sorted expressions when evolving these shared projections.
   Follow docs/ipad-acceptance.md for one combined Mac/iPad/ChatGPT session.
-  Exports include only selected committed records; notes and assistant context
-  require explicit opt-in. Keep Int64 amounts/revisions as strings in the exchange
-  contract. Exporting or receiving analysis cannot approve or edit records.
+  The newer routine review supersedes selected-range export: include pending
+  feedback/open questions and their committed context automatically, including
+  relevant notes/answers and prior/saved values. Explain this before the user
+  shares. Full-history mode includes every accepted record. Keep Int64 amounts/
+  revisions as strings in review/source contracts. Sharing is not receipt;
+  importing analysis cannot approve or edit records without explicit acceptance.
 - Windows setup scripts are in scripts/. The initial prerequisite installation
   was canceled, but Swift 6.4.1 and VS 2022 Developer PowerShell 17.14.42 are now
   available. Refresh the process PATH or reopen terminals after tool installation.
@@ -177,7 +230,9 @@ does not change the requirement to keep financial data and credentials private.
   approval/discussion, separate assistant context, tags, and Exceptional Event are
   implemented in source. Category selection currently uses an invented catalog;
   full taxonomy/subcategories, splits, original bank provenance, reimbursements, bank
-  imports, backup archives, and AI suggestion import remain future work.
+  arbitrary bank adapters and real-data migration remain future work. Narrow
+  source-ID weekly intake, backup archives, and AI classification/guidance import
+  are now implemented in source, pending Mac/iPad checks.
 - Schema v2 adds a validated domain payload alongside frozen v1 fields. A staged
   migration preserves old native review flags as history and marks missing
   treatment/posting/classification unresolved. Do not infer approval from those

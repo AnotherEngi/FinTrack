@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "purpose": "fintrack-weekly-intake",
+  "id": "da960b66-d705-4ee1-8860-b670d801745d",
+  "coverage": "Synthetic fixture only: Fictional Card A, October 19–24, 2026. No actual account, connector, or completeness claim.",
+  "transactions": [
+    {
+      "identity": { "sourceAlias": "Fictional Card A", "transactionID": "synthetic-source-001" },
+      "date": "2026-10-22",
+      "activityDate": "2026-10-21",
+      "merchant": "Synthetic Corner Market",
+      "amountMinorUnits": "4237",
+      "currency": "USD",
+      "postingStatus": "posted",
+      "treatment": "spending",
+      "categoryID": "sample-groceries",
+      "tags": ["Synthetic weekly shop"]
+    },
+    {
+      "identity": { "sourceAlias": "Fictional Card A", "transactionID": "synthetic-source-002" },
+      "date": "2026-10-23",
+      "merchant": "Synthetic Home Supplies",
+      "amountMinorUnits": "1899",
+      "currency": "USD",
+      "postingStatus": "pending",
+      "treatment": "spending",
+      "categoryID": "sample-household",
+      "tags": []
+    }
+  ]
+}

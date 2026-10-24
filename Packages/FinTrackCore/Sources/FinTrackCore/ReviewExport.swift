@@ -12,7 +12,7 @@ public struct ReviewExportOptions: Codable, Equatable, Sendable {
 
 /// A deliberately separate, export-only contract. This is not a database backup
 /// or permission to apply changes, and it excludes drafts and review history.
-public struct ReviewPacket: Encodable, Sendable {
+public struct ReviewPacket: Codable, Sendable {
     public let schemaVersion: Int
     public let purpose: String
     public let packetID: UUID
@@ -25,7 +25,7 @@ public struct ReviewPacket: Encodable, Sendable {
     public let categories: [ReviewCategory]
     public let transactions: [Record]
 
-    public struct Record: Encodable, Sendable {
+    public struct Record: Codable, Sendable {
         public let transactionID: UUID
         /// Decimal strings prevent loss through JavaScript's safe-integer limit.
         public let baseRevision: String

@@ -13,16 +13,22 @@ final class LedgerViewModel {
     private(set) var drafts: [EditorDraft] = []
     private(set) var startupFailure: String?
     private(set) var sessionChanges = SessionChanges()
+    private(set) var workspace = ReviewWorkspace()
+    private(set) var backup: CloudBackup?
     var message: String?
 
     init() {
+        do { try Self.cleanupPreparedFiles() }
+        catch { message = "Older temporary review files could not be removed: \(error.localizedDescription)" }
         do {
             let openedRepository = try LocalTransactionRepository.openDefault()
             let openedDraftStore = try DraftStore(directory:
                 LocalTransactionRepository.applicationSupportDirectory()
-                    .appendingPathComponent("Drafts", isDirectory: true))
+                    .appendingPathComponent("Drafts", isDirectory: true), repository: openedRepository)
             repository = openedRepository
             draftStore = openedDraftStore
+            do { backup = try CloudBackup(directory: LocalTransactionRepository.applicationSupportDirectory()) }
+            catch { message = "Automatic backup could not start: \(error.localizedDescription)" }
         } catch {
             repository = nil
             draftStore = nil
@@ -36,6 +42,8 @@ final class LedgerViewModel {
         do {
             records = try repository.fetchAll()
             drafts = try draftStore.fetchAll()
+            workspace = try repository.workspace()
+            backup?.schedule(try repository.backup())
         } catch {
             message = "Unable to read saved data: \(error.localizedDescription)"
         }
@@ -62,6 +70,7 @@ final class LedgerViewModel {
     func storeDraft(_ draft: EditorDraft) throws {
         guard let draftStore else { throw LedgerError.recordNotFound }
         try draftStore.write(draft)
+        reload()
     }
 
     func commitDraft(_ draft: EditorDraft) throws -> EditorDraft {
@@ -95,6 +104,104 @@ final class LedgerViewModel {
     }
 
     func record(id: UUID) -> LedgerTransaction? { records.first { $0.id == id } }
+
+    func prepareReview(mode: ReviewMode) throws -> URL {
+        guard let repository else { throw LedgerError.recordNotFound }
+        let packet = try repository.prepareReview(mode: mode)
+        let url = try shareFile(data: ExchangeJSON.encode(packet), name: "Review-\(packet.manifest.id.uuidString).json")
+        reload()
+        return url
+    }
+
+    func stageIncoming(_ data: Data) throws {
+        guard let repository else { throw LedgerError.recordNotFound }
+        try repository.stageIncoming(data); reload()
+    }
+
+    func acknowledge(_ id: UUID) throws {
+        guard let repository else { throw LedgerError.recordNotFound }
+        try repository.acknowledgeResponse(fileID: id); reload()
+    }
+
+    func decide(fileID: UUID, proposalID: UUID, accept: Bool) throws {
+        guard let repository else { throw LedgerError.recordNotFound }
+        try repository.decideProposal(fileID: fileID, proposalID: proposalID, accept: accept); reload()
+    }
+
+    func acceptWeekly(fileID: UUID, identity: BankIdentity, matching: LedgerTransaction? = nil, allowSeparate: Bool = false) throws {
+        guard let repository else { throw LedgerError.recordNotFound }
+        try repository.acceptWeekly(fileID: fileID, identity: identity,
+            matchingRecordID: matching?.id, expectedRevision: matching?.revision, allowSeparate: allowSeparate)
+        reload()
+    }
+
+    func saveKnowledge(_ rules: [KnowledgeRule]) throws {
+        guard let repository else { throw LedgerError.recordNotFound }
+        try repository.saveKnowledge(rules); reload()
+    }
+
+    func acceptWeeklyBatch(_ id: UUID) throws {
+        guard let repository else { throw LedgerError.recordNotFound }
+        _ = try repository.acceptNewWeeklyBatch(fileID: id)
+        reload()
+    }
+
+    func exportBackup() throws -> URL {
+        guard let repository else { throw LedgerError.recordNotFound }
+        return try shareFile(data: ExchangeJSON.encode(repository.backup()), name: "FinTrack-backup-\(UUID().uuidString).json")
+    }
+
+    func validateBackup(_ data: Data) throws -> FullBackup {
+        let value = try ExchangeJSON.decode(FullBackup.self, from: data)
+        try value.validate(catalog: catalog)
+        for (id, raw) in value.workspace.drafts {
+            let draft = try JSONDecoder().decode(EditorDraft.self, from: raw)
+            guard draft.id.uuidString == id, draft.expectedRevision.map({ $0 > 0 }) ?? true else {
+                throw ExchangeError.invalid("A backup draft has an invalid ID/revision.")
+            }
+        }
+        return value
+    }
+
+    func restoreBackup(_ value: FullBackup) throws {
+        guard let repository else { throw LedgerError.recordNotFound }
+        // Retain one local pre-restore recovery copy, not an automatic cloud history.
+        let recovery = try LocalTransactionRepository.applicationSupportDirectory().appendingPathComponent("BeforeRestore.json")
+        try ExchangeJSON.encode(repository.backup()).write(to: recovery, options: .atomic)
+        try repository.restore(value)
+        sessionChanges = SessionChanges()
+        reload()
+    }
+
+    func backupNow() async {
+        guard let repository else { return }
+        do { backup?.schedule(try repository.backup()); await backup?.retry() }
+        catch { message = "Could not prepare automatic backup: \(error.localizedDescription)" }
+    }
+
+    private func shareFile(data: Data, name: String) throws -> URL {
+        // Fixed internal prefix and generated UUID names only. Keep recent files
+        // so share extensions can finish reading after the sheet closes.
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("FinTrackPrepared", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let url = directory.appendingPathComponent(name)
+        try data.write(to: url, options: .atomic)
+        return url
+    }
+
+    private static func cleanupPreparedFiles() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("FinTrackPrepared", isDirectory: true)
+        guard FileManager.default.fileExists(atPath: directory.path) else { return }
+        let cutoff = Date.now.addingTimeInterval(-7 * 24 * 60 * 60)
+        for url in try FileManager.default.contentsOfDirectory(at: directory,
+            includingPropertiesForKeys: [.creationDateKey, .isRegularFileKey]) {
+            let values = try url.resourceValues(forKeys: [.creationDateKey, .isRegularFileKey])
+            guard values.isRegularFile == true, let date = values.creationDate, date < cutoff,
+                  url.pathExtension == "json",
+                  url.lastPathComponent.hasPrefix("Review-") || url.lastPathComponent.hasPrefix("FinTrack-backup-") else { continue }
+            try FileManager.default.removeItem(at: url)
+        }
+    }
 
     func perform(_ request: ReviewRequest) throws -> LedgerTransaction {
         guard let repository else { throw LedgerError.recordNotFound }

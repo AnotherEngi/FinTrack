@@ -1,5 +1,12 @@
 # Transaction treatments and review workflow
 
+Latest extension: the new review/backup batch has **64** passing portable tests.
+Durable feedback, returned receipts/proposals, narrow weekly source-ID intake,
+guidance versions, and full-history review are implemented in source. Review
+actions remain explicitly user-owned. See [current guide](chatgpt-export.md) and
+[hardening](hardening.md); older integration-status notes below are historical.
+The current 21-test Apple suite and native/device flows still need validation.
+
 Implemented in source on 2026-10-24. All 50 portable Swift tests pass on Windows.
 The user now reports a successful native build and physical-iPad refund edit/
 reopen pass, plus both Mac package suites passing. The four focused iPad checks

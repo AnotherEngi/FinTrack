@@ -28,16 +28,59 @@ extension TransactionSortColumn {
         }
     }
 
-    func width(in tableWidth: CGFloat) -> CGFloat {
+    var minimumWidth: CGFloat {
         switch self {
         case .activity: 44
         case .date: 80
-        case .amount: 88
-        case .merchant: max(144, tableWidth - 844)
+        case .amount: 108
+        case .merchant: 144
         case .source: 112
-        case .category, .tags: 128
+        case .category: 144
+        case .tags: 128
         case .review: 164
         }
+    }
+
+    static var minimumTableWidth: CGFloat {
+        var total: CGFloat = 0
+        for column in allCases { total += column.minimumWidth }
+        return total
+    }
+
+    func width(in tableWidth: CGFloat) -> CGFloat {
+        let extra = max(0, tableWidth - Self.minimumTableWidth)
+        switch self {
+        case .merchant: return minimumWidth + extra * 0.45
+        case .category: return minimumWidth + extra * 0.35
+        case .tags: return minimumWidth + extra * 0.20
+        default: return minimumWidth
+        }
+    }
+
+    var alignment: Alignment {
+        self == .activity ? .center : self == .amount ? .trailing : .leading
+    }
+}
+
+/// Shared cell geometry keeps header and row edges aligned. Insets are inside
+/// each column's width, including a clear gutter after right-aligned amounts.
+@MainActor
+private struct TransactionTableCell<Content: View>: View {
+    let column: TransactionSortColumn
+    let tableWidth: CGFloat
+    let content: Content
+
+    init(_ column: TransactionSortColumn, tableWidth: CGFloat, @ViewBuilder content: () -> Content) {
+        self.column = column
+        self.tableWidth = tableWidth
+        self.content = content()
+    }
+
+    var body: some View {
+        content
+            .padding(.leading, column == .activity ? 0 : 8)
+            .padding(.trailing, column == .activity ? 0 : column == .amount ? 12 : 8)
+            .frame(width: column.width(in: tableWidth), alignment: column.alignment)
     }
 }
 
@@ -53,7 +96,6 @@ struct TransactionListView: View {
     @State private var amalgamate = false
     @State private var sort = TransactionTableSort()
     @State private var showExport = false
-    @State private var exportIDs: Set<UUID> = []
     @State private var pendingRequest: ReviewRequest?
 
     private var range: TransactionDateRange? {
@@ -98,7 +140,7 @@ struct TransactionListView: View {
                     } actions: { Button("Add Current Synthetic Table Examples") { ledger.loadTableSamples() } }
                 } else {
                     GeometryReader { geometry in
-                        let width = max(988, geometry.size.width - 24)
+                        let width = max(TransactionSortColumn.minimumTableWidth, geometry.size.width - 24)
                         ScrollView([.horizontal, .vertical]) {
                             LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
                                 if amalgamate {
@@ -116,9 +158,9 @@ struct TransactionListView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
-                    Button { exportIDs = Set(visibleRecords.map(\.id)); showExport = true } label: {
-                        Image(systemName: "square.and.arrow.up")
-                    }.accessibilityLabel("Export shown transactions").help("Export shown transactions")
+                    Button { showExport = true } label: {
+                        Label("Review with ChatGPT", systemImage: "square.and.arrow.up").labelStyle(.titleAndIcon)
+                    }.accessibilityLabel("Export shown transactions for ChatGPT").help("Export shown transactions for ChatGPT")
                         .disabled(visibleRecords.isEmpty)
                 }
                 ToolbarItem(placement: .primaryAction) {
@@ -147,7 +189,7 @@ struct TransactionListView: View {
                     .id(draft.id)
             }
             .sheet(isPresented: $showExport) {
-                ReviewExportView(ledger: ledger, initialIDs: exportIDs, showsDone: true)
+                ReviewExportView(ledger: ledger, showsDone: true)
             }
         }
     }
@@ -233,24 +275,25 @@ struct TransactionListView: View {
                             sort = TransactionTableSort(column: column,
                                 ascending: sort.column == column ? !sort.ascending : column != .date && column != .amount)
                         } label: {
-                            HStack(spacing: 3) {
-                                if column == .activity { Image(systemName: "circle.dotted") }
-                                else {
-                                    Text(column.label)
-                                    Image(systemName: sort.column == column
-                                        ? sort.ascending ? "arrow.up" : "arrow.down" : "arrow.up.arrow.down")
-                                        .imageScale(.small)
-                                }
-                            }.font(.caption).foregroundStyle(sort.column == column ? Color.accentColor : Color.secondary)
-                                .frame(width: column.width(in: width), height: 44,
-                                    alignment: column == .activity ? .center : column == .amount ? .trailing : .leading)
+                            TransactionTableCell(column, tableWidth: width) {
+                                HStack(spacing: 3) {
+                                    if column == .activity { Image(systemName: "circle.dotted") }
+                                    else {
+                                        Text(column.label)
+                                        Image(systemName: sort.column == column
+                                            ? sort.ascending ? "arrow.up" : "arrow.down" : "arrow.up.arrow.down")
+                                            .imageScale(.small)
+                                    }
+                                }.font(.caption).foregroundStyle(sort.column == column ? Color.accentColor : Color.secondary)
+                                    .frame(maxWidth: .infinity, minHeight: 44, alignment: column.alignment)
+                            }
                         }.buttonStyle(.plain)
                             .accessibilityLabel("Sort by \(column.label)")
                             .accessibilityValue(sort.column == column ? sort.ascending ? "Ascending" : "Descending" : "Not selected")
                             .help("Sort by \(column.label)")
                     }
                 }
-            }.background(Color(.systemGroupedBackground))
+            }.frame(width: width, alignment: .leading).background(Color(.systemGroupedBackground))
         }
     }
 
@@ -297,30 +340,40 @@ private struct TransactionTableRow: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: 0) {
-            activity.frame(width: TransactionSortColumn.activity.width(in: width))
-            date.frame(width: TransactionSortColumn.date.width(in: width), alignment: .leading)
-            VStack(alignment: .trailing, spacing: 2) {
-                Text(record.draft.amount.decimalText).monospacedDigit().font(.subheadline)
-                if record.draft.postingStatus == .pending { Text("Pending").font(.caption2).foregroundStyle(.secondary) }
-            }.frame(width: TransactionSortColumn.amount.width(in: width), alignment: .trailing)
-            pill(record.draft.payee, origin: record.classificationProvenance.category)
-                .frame(width: TransactionSortColumn.merchant.width(in: width), alignment: .leading)
-            Text(record.draft.source?.label ?? "—").font(.subheadline).lineLimit(3)
-                .help(record.draft.source?.label ?? "Source unavailable on this record")
-                .accessibilityLabel(record.draft.source?.label ?? "Source unavailable")
-                .frame(width: TransactionSortColumn.source.width(in: width), alignment: .leading)
-            Text(catalog.category(id: record.draft.categoryID)?.label ?? record.draft.categoryID ?? "—")
-                .font(.subheadline).lineLimit(3)
-                .frame(width: TransactionSortColumn.category.width(in: width), alignment: .leading)
-            VStack(alignment: .leading, spacing: 4) {
-                if record.draft.tags.isEmpty { Text("—").foregroundStyle(.secondary) }
-                ForEach(record.draft.tags, id: \.self) { tag in
-                    pill(tag, origin: record.classificationProvenance.tags[tag] ?? .unknown)
+            TransactionTableCell(.activity, tableWidth: width) { activity }
+            TransactionTableCell(.date, tableWidth: width) { date }
+            TransactionTableCell(.amount, tableWidth: width) {
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(record.draft.amount.decimalText).monospacedDigit().font(.subheadline)
+                    if record.draft.postingStatus == .pending { Text("Pending").font(.caption2).foregroundStyle(.secondary) }
                 }
-            }.frame(width: TransactionSortColumn.tags.width(in: width), alignment: .leading)
-            actions.frame(width: TransactionSortColumn.review.width(in: width), alignment: .leading)
+            }
+            TransactionTableCell(.merchant, tableWidth: width) {
+                Text(record.draft.payee).font(.subheadline).foregroundStyle(.primary).lineLimit(3)
+                    .help(record.draft.payee)
+            }
+            TransactionTableCell(.source, tableWidth: width) {
+                Text(record.draft.source?.label ?? "—").font(.subheadline).lineLimit(3)
+                    .help(record.draft.source?.label ?? "Source unavailable on this record")
+                    .accessibilityLabel(record.draft.source?.label ?? "Source unavailable")
+            }
+            TransactionTableCell(.category, tableWidth: width) {
+                if let categoryID = record.draft.categoryID {
+                    pill(catalog.category(id: categoryID)?.label ?? categoryID,
+                        origin: record.classificationProvenance.category)
+                } else { Text("—").foregroundStyle(.secondary).accessibilityLabel("Category unavailable") }
+            }
+            TransactionTableCell(.tags, tableWidth: width) {
+                VStack(alignment: .leading, spacing: 4) {
+                    if record.draft.tags.isEmpty { Text("—").foregroundStyle(.secondary) }
+                    ForEach(record.draft.tags, id: \.self) { tag in
+                        pill(tag, origin: record.classificationProvenance.tags[tag] ?? .unknown)
+                    }
+                }
+            }
+            TransactionTableCell(.review, tableWidth: width) { actions }
         }
-        .padding(.vertical, 12).frame(minHeight: 68)
+        .padding(.vertical, 12).frame(width: width, alignment: .leading).frame(minHeight: 68)
         .background(Color(.secondarySystemGroupedBackground))
         .accessibilityElement(children: .contain)
     }

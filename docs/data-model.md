@@ -3,6 +3,16 @@
 Status: first synthetic prototype, 2026-10-24. This document records provisional
 implementation conventions; it does not finalize bank import or ChatGPT formats.
 
+Current source extension: schema **V3** adds a workspace while preserving V2's
+transaction fields. It stores durable feedback/manifests, incoming/results and
+receipt/decision journals, original/latest scoped source evidence, versioned
+guidance, and raw editor drafts. Ledger mutations and feedback save atomically.
+Draft migration retains original files; restore replaces the complete logical
+state in one transaction. See [current exchange/backup contracts](chatgpt-export.md)
+and [hardening](hardening.md). Narrow weekly v1 intake and classification/guidance
+proposals are implemented in source; older "not implemented" notes below describe
+the initial prototype. Mac migration/build and iPad upload/restore remain pending.
+
 ## Implemented values
 
 | Value | Representation and invariant |

@@ -111,10 +111,27 @@ enum LedgerSchemaV2: VersionedSchema {
     }
 }
 
+enum LedgerSchemaV3: VersionedSchema {
+    static var versionIdentifier: Schema.Version { Schema.Version(3, 0, 0) }
+    // Reuse the unchanged transaction model; V2's persisted fields remain frozen.
+    static var models: [any PersistentModel.Type] { [LedgerSchemaV2.StoredTransaction.self, StoredWorkspace.self] }
+
+    @Model
+    final class StoredWorkspace {
+        @Attribute(.unique) var key: String
+        var payload: Data
+        init(_ value: ReviewWorkspace) throws {
+            key = "workspace"
+            payload = try JSONEncoder().encode(value)
+        }
+    }
+}
+
 enum LedgerMigrationPlan: SchemaMigrationPlan {
-    static var schemas: [any VersionedSchema.Type] { [LedgerSchemaV1.self, LedgerSchemaV2.self] }
+    static var schemas: [any VersionedSchema.Type] { [LedgerSchemaV1.self, LedgerSchemaV2.self, LedgerSchemaV3.self] }
     static var stages: [MigrationStage] {
-        [.lightweight(fromVersion: LedgerSchemaV1.self, toVersion: LedgerSchemaV2.self)]
+        [.lightweight(fromVersion: LedgerSchemaV1.self, toVersion: LedgerSchemaV2.self),
+         .lightweight(fromVersion: LedgerSchemaV2.self, toVersion: LedgerSchemaV3.self)]
     }
 }
 

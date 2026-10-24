@@ -10,7 +10,12 @@ struct FinTrackApp: App {
         WindowGroup {
             FinTrackRootView(ledger: ledger)
                 .onChange(of: scenePhase) { _, phase in
-                    if phase == .active { ledger.reload() }
+                    if phase == .active {
+                        ledger.reload()
+                        Task { await ledger.backupNow() }
+                    } else if phase == .background {
+                        Task { await ledger.backupNow(); ledger.backup?.pauseObservation() }
+                    }
                 }
         }
     }

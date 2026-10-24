@@ -2,9 +2,33 @@
 
 Updated 2026-10-24. All device checks use synthetic transactions.
 
-The user-reported native passes below cover the earlier prototype. The approved
-transaction table, current payload fields, export, and other new tabs have not
-yet been built or exercised on Mac/iPad; see the
+## Current review/intake/backup batch
+
+This section supersedes implementation status/counts in the earlier table below.
+The previous three-file export was never tested on iPad and has been replaced.
+
+| Check | Result | Evidence / required next step |
+| --- | --- | --- |
+| Portable rules and regression suite | Pass, agent executed | All 64 Swift Testing tests pass on Windows Swift 6.4.1, including 14 new exchange/backup/editor cases |
+| Apple source syntax | Pass, agent executed | All 12 app/persistence source/test files parse; no Apple SDK types/macros checked |
+| Xcode project references / scheme | Pass, static only | Unique/defined object IDs, all eight app sources referenced, scheme XML valid; Mac plutil/build still needed |
+| Synthetic weekly fixture / whitespace | Pass, agent executed | JSON parsed, diff check clean; no financial accounts/files used |
+| Mac persistence suite / schema V3 | Pending | 21 authored tests, nine new; existing-store and raw-draft migration need Mac execution |
+| Automatic packet / ChatGPT round trip | Implemented in source, pending device check | One file, pending/open context, full history, returned receipt/proposals, explicit acceptance and stale/replay protection |
+| Weekly source intake / guidance | Implemented in source, pending native check | Atomic new-row batches, genuine scoped IDs, explicit reconciliation, guidance edits and version conflicts |
+| Automatic iCloud backup | Implemented in source, unverified on device | One-time folder permission, durable candidate/retries, uploaded metadata confirmation; independently inspect cloud contents |
+| Full backup restore | Implemented in source, pending native check | Validate/confirm/atomic replace, keep a local pre-restore copy, include drafts and exchange state |
+
+Follow [one combined Mac/iPad checklist](ipad-acceptance.md). See
+[hardening report](hardening.md) for fixes and limits. No current-batch native
+build, cloud upload, restore, or real-data safety pass is claimed.
+
+## Earlier table batch (historical)
+
+Earlier test passes cover the earlier prototype. The user has now provided an
+iPad screenshot of the native transaction table and reported color/width/gutter
+issues. The category/tag and layout refinements are prepared locally; export
+handoff and broader checks remain unreported. See the
 [single combined acceptance session](ipad-acceptance.md).
 
 | Check | Result | Evidence / limits |
@@ -14,7 +38,7 @@ yet been built or exercised on Mac/iPad; see the
 | Portable finance/table/export tests | Pass, agent executed | All 50 tests passed with Windows Swift 6.4.1, including 16 new table/model tests |
 | FinTrackCore tests on Mac | Pass, user reported | User reports the suite passed; test output and counts were not supplied |
 | FinTrackPersistence tests on Mac | Pass, user reported | User reports the suite passed; authored coverage includes migration preservation, reopen, rollback, and retry. Test output and counts were not supplied |
-| Current Mac package compilation | Failed, user reported; source fix prepared | Both suites stopped at the shared Core history expression in LedgerDisplay.swift. History/overview chains were split into typed loops and separate sorts; all 50 Windows tests passed again. Mac rerun is pending |
+| Current Mac package compilation | Earlier failure corrected in source; suite rerun not reported | Shared history/overview chains were split into typed loops/separate sorts; all 50 Windows tests passed again. The new native app now runs on iPad; standalone suite results remain unreported |
 | Explicit approval/discussion behavior in UI | Provisional pass, user reported | User said all four focused checks appeared to work; no individual observations/logs supplied |
 | Invalid draft after process termination | Provisional pass, user reported | Included in the user's report that the focused checks appeared to work; no individual observations/logs supplied |
 | Offline physical-device save/relaunch | Provisional pass, user reported | Included in the user's report that the focused checks appeared to work; no individual observations/logs supplied |
@@ -22,7 +46,8 @@ yet been built or exercised on Mac/iPad; see the
 | New tab navigation, totals, exclusions, drilldowns | Pending on Mac/iPad | Portable rules pass; new SwiftUI controls still need native validation |
 | New native source syntax | Pass, agent executed | All ten app/persistence source/test files parsed on Windows; this does not check Apple SDK types |
 | Current Apple persistence suite | Pending on Mac | Twelve tests, including four new source/provenance/progress/legacy-payload and append tests |
-| Approved native table and lifecycle | Implemented in source; device check pending | Search/presets/sort/Amalgamate, source/origin pills, icon actions, session/draft and discussion states |
+| Native transaction table on iPad | Runs, user screenshot/report | Screenshot shows search/presets/Amalgamate, status, source/category/tag columns and icon actions. User corrected highlights to category/tags and reported short row backgrounds and amount/merchant crowding |
+| Category/tag colors, row width/gutters, Export discovery refinement | Prepared; device recheck pending | Merchants now plain; only category/tags use provenance/approval pills. Column minima sum to 924pt, with extra width distributed explicitly; shared insets and full-width frames align headers/rows. Export now has a visible text label and workflow guidance |
 | ChatGPT export sharing and manual analysis | Implemented in source; device check pending | JSON/CSV/prompt export, privacy switches, preview, multi-file/individual sharing |
 | Returned ChatGPT suggestion import | Not implemented | No automatic apply, acceptance receipts, or exchange replay/conflict handling yet |
 
