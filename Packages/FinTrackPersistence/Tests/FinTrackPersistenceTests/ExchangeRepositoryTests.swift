@@ -153,14 +153,17 @@ private enum ExchangeWriteFailure: Error { case disk }
     let packet = try repository.prepareReview(mode: .fullHistory)
     let p1 = KnowledgeProposal(text: "Synthetic rule one", rationale: "Synthetic")
     let p2 = KnowledgeProposal(text: "Synthetic rule two", rationale: "Synthetic")
+    let p3 = KnowledgeProposal(text: "Synthetic rule three", rationale: "Synthetic")
     let response = ReviewResponse(packetID: packet.manifest.id, knowledgeVersion: packet.manifest.knowledgeVersion,
-        knowledgeProposals: [p1, p2])
+        knowledgeProposals: [p1, p2, p3])
     try repository.stageIncoming(ExchangeJSON.encode(response))
     try repository.decideProposal(fileID: response.id, proposalID: p1.id, accept: true)
+    try repository.decideProposal(fileID: response.id, proposalID: p2.id, accept: true)
+    #expect(try repository.workspace().knowledge.count == 2)
     var rules = try repository.workspace().knowledge
     rules[0].text = "Synthetic manual correction"
     try repository.saveKnowledge(rules)
-    #expect(throws: LedgerError.staleRevision) { try repository.decideProposal(fileID: response.id, proposalID: p2.id, accept: true) }
+    #expect(throws: LedgerError.staleRevision) { try repository.decideProposal(fileID: response.id, proposalID: p3.id, accept: true) }
 }
 
 @MainActor

@@ -257,11 +257,7 @@ public final class LocalTransactionRepository: TransactionRepository {
             }
         } else if let proposal = response.knowledgeProposals.first(where: { $0.id == proposalID }) {
             if accept {
-                guard workspace.knowledgeVersion == response.knowledgeVersion else {
-                    // Multiple proposals from this same response remain valid until another
-                    // response or a user edit changes the knowledge library (see below).
-                    guard workspace.knowledgeResponseID == response.id else { throw LedgerError.staleRevision }
-                }
+                try workspace.validateKnowledgeFreshness(response)
                 if let replacing = proposal.replacingRuleID {
                     guard let index = workspace.knowledge.firstIndex(where: { $0.id == replacing }) else { throw LedgerError.recordNotFound }
                     workspace.knowledge[index] = KnowledgeRule(id: replacing, text: proposal.text, origin: "accepted-assistant")

@@ -433,7 +433,7 @@ export/confirmed restore is supplementary; restore preserves a local recovery co
 Backups include drafts and exchange state, but no permission bookmarks/credentials.
 
 See [review/backup guide](chatgpt-export.md), [combined device test](ipad-acceptance.md),
-and [hardening report](hardening.md). All 64 portable tests pass on Windows; 21
+and [hardening report](hardening.md). All 65 portable tests pass on Windows; 21
 Apple persistence tests and the app build/upload/restore await Mac/iPad validation.
 The 50 MB file limit fails visibly without truncation. Full taxonomy, splits,
 reimbursements, automatic cloud transport to ChatGPT, and real-history migration

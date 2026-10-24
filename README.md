@@ -69,7 +69,7 @@ iPad; do not uninstall or delete its store to resolve a migration failure. No
 CloudKit capability is required for the user-selected iCloud Drive folder.
 
 Windows can run `scripts/Test-Core.ps1` with the installed Swift/VS tools. Windows
-verification for this batch: all **64** portable tests pass; all 12 Apple source/
+verification for this batch: all **65** portable tests pass; all 12 Apple source/
 test files pass syntax parsing.
 Windows
 cannot typecheck SwiftUI/SwiftData or verify iCloud behavior. The Apple persistence

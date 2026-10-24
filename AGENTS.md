@@ -167,7 +167,7 @@ does not change the requirement to keep financial data and credentials private.
 
 ## Validation and environment
 
-- Current review/backup batch: all **64** portable tests pass on Windows Swift
+- Current review/backup batch: all **65** portable tests pass on Windows Swift
   6.4.1. Hardening results are recorded
   in docs/device-verification.md. Twelve Apple source/test files pass Windows
   syntax parsing only. There are 21 Apple persistence tests (nine new); run them

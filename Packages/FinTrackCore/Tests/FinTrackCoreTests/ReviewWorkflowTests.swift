@@ -2,6 +2,21 @@ import Foundation
 import Testing
 @testable import FinTrackCore
 
+@Test func knowledgeFreshnessAllowsSequentialResponseProposalsButRejectsInterveningEdits() throws {
+    var state = ReviewWorkspace()
+    let response = ReviewResponse(packetID: UUID(), knowledgeVersion: state.knowledgeVersion)
+    try state.validateKnowledgeFreshness(response)
+    // Accepting the first proposal changes the version, retaining its lineage.
+    state.knowledgeVersion = UUID()
+    state.knowledgeResponseID = response.id
+    try state.validateKnowledgeFreshness(response)
+    // A manual edit clears lineage; another response replaces it.
+    state.knowledgeResponseID = nil
+    #expect(throws: LedgerError.staleRevision) { try state.validateKnowledgeFreshness(response) }
+    state.knowledgeResponseID = UUID()
+    #expect(throws: LedgerError.staleRevision) { try state.validateKnowledgeFreshness(response) }
+}
+
 @Test func pendingFeedbackSurvivesRestartAndOldReceiptPreservesNewEdits() throws {
     let original = try SyntheticTransactions.make()[0]
     var state = ReviewWorkspace()

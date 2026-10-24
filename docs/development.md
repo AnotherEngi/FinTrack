@@ -4,7 +4,7 @@ Updated 2026-10-24. Use synthetic data throughout development.
 
 ## Latest review/intake/backup batch
 
-Current verification: **64 portable tests pass** on Windows Swift 6.4.1; all 12
+Current verification: **65 portable tests pass** on Windows Swift 6.4.1; all 12
 Apple source/test files pass syntax-only parsing. There are **21** authored Apple
 persistence tests, nine new. Windows has not typechecked SwiftUI/SwiftData or
 validated iCloud folder permission, migration, upload confirmation, or restore.

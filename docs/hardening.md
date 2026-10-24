@@ -5,6 +5,14 @@ the new review/intake/backup flows. This is not an Apple build or cloud test.
 
 ## Findings addressed
 
+- **First Mac compilation failure after push:** a nested `guard` in the guidance
+  freshness check allowed its outer `else` block to fall through. Windows syntax
+  parsing did not catch this semantic error. Move the check into the portable
+  core with one throwing guard, add a Windows regression for same-response versus
+  intervening-edit cases, and expand the existing Apple integration test to accept
+  two proposals before rejecting a third after a manual edit. Mac rerun remains
+  required; syntax-only parsing is not a substitute for semantic compilation.
+
 - **Lost feedback after restart:** process-session markers were not durable.
   Schema V3 persists feedback, manifests, drafts, and journals. Record mutations
   and feedback/draft changes share one explicit SwiftData transaction/rollback.
@@ -48,8 +56,8 @@ the new review/intake/backup flows. This is not an Apple build or cloud test.
 
 ## Verification executed
 
-- `scripts/Test-Core.ps1`: Swift 6.4.1, **64 Swift Testing tests passed**, exit 0.
-  Fourteen tests are new for this batch. The separate XCTest runner's zero tests
+- `scripts/Test-Core.ps1`: Swift 6.4.1, **65 Swift Testing tests passed**, exit 0.
+  Fifteen tests are new for this batch. The separate XCTest runner's zero tests
   is expected; the Swift Testing summary is the actual result.
 - Windows `swiftc -frontend -parse`: all **12** Apple app/persistence source/test
   files pass syntax parsing. This does not expand SwiftData macros, resolve Apple

@@ -7,9 +7,16 @@ Updated 2026-10-24. All device checks use synthetic transactions.
 This section supersedes implementation status/counts in the earlier table below.
 The previous three-file export was never tested on iPad and has been replaced.
 
+The user supplied a Mac terminal screenshot showing all 64 tests from commit
+`a25e3a9` passing in FinTrackCore. FinTrackPersistence then failed to compile at
+LocalTransactionRepository.swift:264 because an outer guard could fall through;
+no persistence tests ran. The correction moves guidance freshness validation into
+the portable package, with a new regression (65 tests total). The corrected Mac
+packages/app have not yet been rerun/reported. Preserve the existing store.
+
 | Check | Result | Evidence / required next step |
 | --- | --- | --- |
-| Portable rules and regression suite | Pass, agent executed | All 64 Swift Testing tests pass on Windows Swift 6.4.1, including 14 new exchange/backup/editor cases |
+| Portable rules and regression suite | Pass, agent executed | All 65 Swift Testing tests pass on Windows Swift 6.4.1, including 15 new exchange/backup/editor/freshness cases |
 | Apple source syntax | Pass, agent executed | All 12 app/persistence source/test files parse; no Apple SDK types/macros checked |
 | Xcode project references / scheme | Pass, static only | Unique/defined object IDs, all eight app sources referenced, scheme XML valid; Mac plutil/build still needed |
 | Synthetic weekly fixture / whitespace | Pass, agent executed | JSON parsed, diff check clean; no financial accounts/files used |

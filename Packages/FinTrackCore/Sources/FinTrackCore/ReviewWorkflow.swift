@@ -412,6 +412,15 @@ public struct ReviewWorkspace: Codable, Sendable {
         }
     }
 
+    /// Sequential proposals from one response remain eligible until a manual
+    /// edit or another response changes the guidance. Keep this rule portable
+    /// so Windows compilation/tests cover its control flow as well as its logic.
+    public func validateKnowledgeFreshness(_ response: ReviewResponse) throws {
+        guard knowledgeVersion == response.knowledgeVersion || knowledgeResponseID == response.id else {
+            throw LedgerError.staleRevision
+        }
+    }
+
     public mutating func acknowledge(_ response: ReviewResponse) throws {
         try validate(response)
         guard !processedFiles.contains(response.id) else { return }

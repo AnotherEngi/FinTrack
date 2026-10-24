@@ -1,6 +1,6 @@
 # Transaction treatments and review workflow
 
-Latest extension: the new review/backup batch has **64** passing portable tests.
+Latest extension: the new review/backup batch has **65** passing portable tests.
 Durable feedback, returned receipts/proposals, narrow weekly source-ID intake,
 guidance versions, and full-history review are implemented in source. Review
 actions remain explicitly user-owned. See [current guide](chatgpt-export.md) and
