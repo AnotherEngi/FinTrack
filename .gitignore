@@ -1,0 +1,39 @@
+# Private runtime/import/export material. Prefer keeping it outside this checkout.
+/private/
+/local-data/
+/imports/
+/exports/
+/backups/
+.env
+.env.*
+!.env.example
+*.p12
+*.pfx
+*.pem
+*.key
+*.mobileprovision
+*.provisionprofile
+*.sqlite
+*.sqlite-*
+*.sqlite3
+*.sqlite3-*
+*.db
+*.db-*
+*.store
+*.store-*
+*.store.amount-sign
+
+# Swift/Xcode output and personal state. Synthetic CSV/JSON fixtures stay trackable.
+.build/
+.swiftpm/
+DerivedData/
+build/
+xcuserdata/
+*.xcuserstate
+.DS_Store
+
+# Local VS Code workspace preferences.
+/.vscode/
+
+# PowerShell cache observed in this workspace.
+/Microsoft/Windows/PowerShell/ModuleAnalysisCache
