@@ -22,7 +22,7 @@ struct QuestionsView: View {
     @State private var search = ""
     @State private var selected: LedgerTransaction?
     @State private var showExchange = false
-    @State private var page = ReviewPage.send
+    @State private var showImport = false
 
     private var rows: [LedgerTransaction] {
         ledger.records.filter { record in
@@ -73,14 +73,15 @@ struct QuestionsView: View {
             .searchable(text: $search, prompt: "Search discussions")
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
-                    Button("Send replies", systemImage: "square.and.arrow.up") { page = .send; showExchange = true }
+                    Button("Send replies", systemImage: "square.and.arrow.up") { showExchange = true }
                 }
                 ToolbarItem(placement: .primaryAction) {
-                    Button("Import reply", systemImage: "square.and.arrow.down") { page = .inbox; showExchange = true }
+                    Button("Import reply", systemImage: "square.and.arrow.down") { showImport = true }
                 }
             }
             .sheet(item: $selected) { record in DiscussionDetailView(ledger: ledger, recordID: record.id) }
-            .sheet(isPresented: $showExchange) { ReviewExportView(ledger: ledger, showsDone: true, initialPage: page) }
+            .sheet(isPresented: $showExchange) { SendReviewView(ledger: ledger) }
+            .sheet(isPresented: $showImport) { ImportReviewView(ledger: ledger) }
             .refreshable { ledger.reload() }
         }
     }
@@ -154,7 +155,7 @@ struct DiscussionDetailView: View {
             }
             .onChange(of: reply) { _, _ in persistDraft() }
             .interactiveDismissDisabled(draftWriteFailed)
-            .sheet(isPresented: $showExchange) { ReviewExportView(ledger: ledger, showsDone: true) }
+            .sheet(isPresented: $showExchange) { SendReviewView(ledger: ledger) }
             .sheet(isPresented: $showEditor, onDismiss: { if reply.isEmpty { baseRevision = record?.revision } }) {
                 if let record { TransactionEditorView(ledger: ledger, draft: ledger.editor(for: record)) { _ in } }
             }

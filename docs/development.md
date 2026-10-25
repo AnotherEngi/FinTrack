@@ -1,10 +1,33 @@
 # Development and verification
 
-Updated 2026-10-24. Use synthetic data throughout development.
+Updated 2026-10-25. Use synthetic data throughout development.
 
-## Latest review/intake/backup batch
+## Current unverified batch: 2026-10-25
 
-Current verification: **83 portable tests pass** on Windows Swift 6.4.1; all 14
+Overview/Visibility/refund changes are documented in [the current design](design/overview.md).
+No terminal commands, Swift tests, Apple parsing, commits, or pushes were executed
+for this batch. The user's human-run-command preference remains active. Run:
+
+```powershell
+Set-Location 'C:\Users\rproi\source\repos\FinTrack'
+swift test --package-path Packages/FinTrackCore
+```
+
+On Mac, from the checkout root:
+
+```sh
+swift test --package-path Packages/FinTrackCore
+swift test --package-path Packages/FinTrackPersistence
+xcodebuild -project Apps/FinTrack/FinTrack.xcodeproj -scheme FinTrack -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build
+```
+
+These are instructions for the user, not verification results. Earlier counts
+below are for previous source revisions. Rebuild/install through Xcode for the
+physical iPad; do not delete the app/store or reset signing changes to update it.
+
+## Previous review/intake/backup batch
+
+Previous-revision verification: **83 portable tests passed** on Windows Swift 6.4.1; all 14
 Apple source/test files pass syntax-only parsing. There are **27** authored Apple
 persistence tests, two added by the final hardening pass. Windows has not typechecked SwiftUI/Charts/SwiftData or
 validated iCloud folder permission, migration, upload confirmation, or restore.
@@ -216,3 +239,4 @@ has no direct Mac session. Earlier static checks
 covered PowerShell syntax, scheme XML, project reference paths, cloud-disabled
 configuration, and whitespace. Windows core-test success does not establish that
 the SwiftData package or iPad app compiles or runs.
+

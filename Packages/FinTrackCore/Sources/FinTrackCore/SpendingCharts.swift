@@ -12,6 +12,8 @@ public struct SpendingMonth: Identifiable, Sendable {
 
 /// Exact accounting values and observed months only. Chart coordinates are
 /// derived in the Apple UI; no floating-point finance arithmetic is used here.
+/// Legacy receipt-date projection. Overview uses SummaryReport instead, so
+/// linked refunds adjust original purchase dates rather than receipt months.
 public struct SpendingCharts: Sendable {
     public let totals: SpendingTotals
     public let categories: [SpendingBucket]

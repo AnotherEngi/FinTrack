@@ -1,6 +1,14 @@
 # Combined Mac/iPad acceptance: review, intake, and iCloud backup
 
-## Latest UI follow-up (supersedes earlier control names below)
+## Latest Overview/Visibility batch
+
+The 2026-10-25 batch supersedes earlier Overview/transfer UI expectations in this
+file. Follow [the current design and seven device checks](design/overview.md#validation-to-run),
+including keyboard/trackpad hover, side-by-side charts, inline whole-period
+selection, persistent visibility, purchase-date refunds, and backup/restore.
+No new tests/builds have been run for this batch. Keep all test records synthetic.
+
+## Earlier UI follow-up (historical Overview and transfer layout)
 
 Follow [current review/discussion flow](review-flow.md). Current source adds:
 
@@ -167,3 +175,4 @@ configured. OS device backup remains a separate extra layer.
 Record each Mac/iPad result in docs/device-verification.md. Real-history migration,
 backup correctness, and native file-provider behavior remain unverified until
 these checks are complete. Report any failure with the exact error and step.
+

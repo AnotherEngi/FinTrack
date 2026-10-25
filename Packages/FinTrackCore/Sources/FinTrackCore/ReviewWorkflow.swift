@@ -58,6 +58,10 @@ public struct FeedbackEvent: Codable, Equatable, Identifiable, Sendable {
 
     private static func fields(_ record: LedgerTransaction) -> [String: String] {
         let value = record.draft
+        let allocations = (value.refundAllocations ?? []).sorted { $0.purchaseID.uuidString < $1.purchaseID.uuidString }
+        let allocationText = allocations.map {
+            $0.purchaseID.uuidString + ":" + String($0.amount.minorUnits) + ":" + $0.amount.currency.rawValue
+        }.joined(separator: "; ")
         return ["date": value.date.iso8601, "activityDate": value.activityDate?.iso8601 ?? "",
             "merchant": value.payee, "amountMinorUnits": String(value.amount.minorUnits),
             "currency": value.amount.currency.rawValue, "categoryID": value.categoryID ?? "",
@@ -65,7 +69,8 @@ public struct FeedbackEvent: Codable, Equatable, Identifiable, Sendable {
             "sourceLabel": value.source?.label ?? "", "sourceID": value.source?.id.uuidString ?? "",
             "postingStatus": value.postingStatus.rawValue, "treatment": value.treatment.rawValue,
             "exceptionalEvent": String(value.exceptionalEvent), "approval": record.approval.rawValue,
-            "discussion": record.discussionProgress?.rawValue ?? ""]
+            "discussion": record.discussionProgress?.rawValue ?? "",
+            "refundAllocations": allocationText]
     }
 
     private init(id: UUID, recordID: UUID?, beforeRevision: String?, afterRevision: String?,
@@ -90,6 +95,7 @@ public struct FeedbackEvent: Codable, Equatable, Identifiable, Sendable {
         if old.draft.activityDate != new.draft.activityDate { fields.append("activity date") }
         if old.draft.payee != new.draft.payee { fields.append("merchant") }
         if old.draft.amount != new.draft.amount { fields.append("amount") }
+        if (old.draft.refundAllocations ?? []) != (new.draft.refundAllocations ?? []) { fields.append("refund allocations") }
         if old.draft.categoryID != new.draft.categoryID { fields.append("category") }
         if old.draft.tags != new.draft.tags { fields.append("tags") }
         if old.draft.notes != new.draft.notes { fields.append("user note") }
@@ -329,6 +335,7 @@ public struct ReviewWorkspace: Codable, Sendable {
     public var discussionReplies: [UserDiscussionReply]?
     public var resolvedDiscussions: [String: DiscussionBoundary]?
     public var discussionDrafts: [String: DiscussionDraft]?
+    public var summaryVisibility: SummaryVisibility?
     public init() {}
 
     public mutating func recordUserChange(before: LedgerTransaction?, after: LedgerTransaction, kind: String = "user-edit") {
@@ -362,13 +369,21 @@ public struct ReviewWorkspace: Codable, Sendable {
 
     private mutating func prepareSnapshot(records: [LedgerTransaction], catalog: ReviewCatalog,
                                          mode: ReviewMode, at: Date) throws -> ReviewEnvelope {
+        try RefundAccounting.validate(records: records)
         establishBaseline(records: records)
         let threads = discussions(in: records)
         let open = Set(threads.filter { !$0.isResolved && $0.status != .draft }.map(\.recordID))
         guard mode == .fullHistory || !pending.isEmpty || !open.isEmpty else {
             throw ExchangeError.invalid("No pending feedback. Use Full history review to analyze the ledger.")
         }
-        let ids = Set(pending.compactMap(\.recordID)).union(open)
+        var ids = Set(pending.compactMap(\.recordID)).union(open)
+        let originalIDs = ids
+        for refund in records {
+            let purchases = Set((refund.draft.refundAllocations ?? []).map(\.purchaseID))
+            if originalIDs.contains(refund.id) || !purchases.isDisjoint(with: originalIDs) {
+                ids.insert(refund.id); ids.formUnion(purchases)
+            }
+        }
         let selected = mode == .fullHistory ? records : records.filter { ids.contains($0.id) }
         let export: ReviewExport? = selected.isEmpty ? nil : try ReviewExport(records: selected,
             catalog: catalog, options: .init(includeUserContext: true, includeAssistantContext: true), exportedAt: at)
@@ -527,6 +542,11 @@ public struct ReviewWorkspace: Codable, Sendable {
     rationale, and optionally categoryID, tags (complete replacement list). Omitted/null
     fields mean no change. Category IDs must come from snapshot.categories. Do not change amounts,
     source facts, user notes/answers, approval, or record IDs. Questions are assistant-authored.
+    Refund allocations link positive amounts to original purchase IDs. Keep the actual refund
+    bank date; spending charts subtract linked amounts on the original purchase activity date
+    (or posted date when unknown), using its category. Unallocated refunds need user linking;
+    do not guess links or treat them as negative spending on the date received. Explain missing
+    allocations through discussion answers. Refund links are read-only in this response contract.
     knowledgeProposals have id, optional replacingRuleID, text, rationale. Suggest scoped rules,
     not blanket conclusions from one correction. The user explicitly accepts/rejects proposals.
     For new weekly bank data use a SEPARATE fintrack-weekly-intake v1 file: id UUID, coverage text,
@@ -595,6 +615,8 @@ public struct FullBackup: Codable, Sendable {
             throw ExchangeError.invalid("The backup is invalid or has an unsupported version/convention.")
         }
         let ids = Set(records.map(\.id))
+        try workspace.summaryVisibility?.validate(recordIDs: ids)
+        try RefundAccounting.validate(records: records)
         let revisions = Dictionary(uniqueKeysWithValues: records.map { ($0.id, $0.revision) })
         let replies = workspace.discussionReplies ?? []
         guard Set(replies.map(\.id)).count == replies.count else { throw ExchangeError.invalid("Duplicate discussion reply IDs in backup.") }

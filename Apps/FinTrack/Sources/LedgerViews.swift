@@ -7,7 +7,7 @@ struct FinTrackRootView: View {
     @State private var tab = WorkspaceTab.review
     @State private var showBackup = false
 
-    private enum WorkspaceTab: Hashable { case overview, review, questions, history, export }
+    private enum WorkspaceTab: Hashable { case overview, review, questions, history, export, visibility }
 
     var body: some View {
         Group {
@@ -20,6 +20,8 @@ struct FinTrackRootView: View {
                         .tabItem { Label("Overview", systemImage: "chart.bar") }.tag(WorkspaceTab.overview)
                     TransactionListView(ledger: ledger)
                         .tabItem { Label("Transactions", systemImage: "tablecells") }.tag(WorkspaceTab.review)
+                    VisibilityView(ledger: ledger)
+                        .tabItem { Label("Visibility", systemImage: "eye.slash") }.tag(WorkspaceTab.visibility)
                     QuestionsView(ledger: ledger)
                         .tabItem { Label("Discussions", systemImage: "bubble.left.and.bubble.right") }
                         .badge(ledger.discussions.values.filter { !$0.isResolved || $0.status == .draft }.count)
@@ -39,7 +41,7 @@ struct FinTrackRootView: View {
                 }.background(.thinMaterial)
             }
         }
-        .sheet(isPresented: $showBackup) { ReviewExportView(ledger: ledger, showsDone: true, initialPage: .backup) }
+        .sheet(isPresented: $showBackup) { BackupSettingsView(ledger: ledger) }
         .task {
             while !Task.isCancelled {
                 await ledger.backupNow()

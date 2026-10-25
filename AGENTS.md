@@ -121,6 +121,25 @@ user instruction, not an inferred approval requirement from a skill.
 
 ### Implementation state
 
+- Latest 2026-10-25 design supersedes the earlier Overview: two side-by-side
+  charts (category-stacked period bars and matching pie), temporary legend
+  switches below the left, initially empty contextual purchase panel below the
+  right. Explicit click/tap only; chart hover must never open a modal. A bar
+  selects its whole period. Support keyboard/trackpad as well as touch.
+- Visibility is persistent summary-only workspace metadata, backed up with the
+  ledger; hide by transaction/category/tag with OR semantics. Show hidden bypasses
+  these rules only. Temporary legend filters reset on dates/background/close and
+  never filter exports or authoritative records. See [Overview design](docs/design/overview.md).
+- Refunds link positive amounts to original posted purchases, possibly split.
+  Overview reduces the purchases' activity dates (posted dates if unknown) and
+  categories, including refunds received outside the selected range. Preserve
+  actual bank dates/amounts. Unallocated refunds need explicit linking; never
+  guess or subtract them on the receipt date. Validate refund and purchase caps,
+  persist raw drafts on failure, and include read-only links in review packets.
+- Send/Import/Backup now use independent screens, not tabs of one transfer sheet.
+  This new batch has not been compiled/tested or published; human-run commands
+  only remain in effect. Earlier passed test counts apply to the previous revision.
+
 - Latest iPad feedback: all populated category/tag values have colored review
   pills, including older unknown provenance (orange needs review; keep stored
   origin unknown). Blue is user-edited and green approved. The earlier neutral
@@ -131,13 +150,13 @@ user instruction, not an inferred approval requirement from a skill.
   approvals or automatic financial edits. Preserve legacy response compatibility.
   Discussions replaces Questions, with a thin question column beside activity.
   Reply drafts/messages/closure are optional V3 workspace fields, backed up.
-- Send, Import, and Backup are separate review pages. Lock preparation choices
+- Send, Import, and Backup are independent screens without a shared page picker. Lock preparation choices
   after creating a file; label its mode and require Start Another Review to
   prepare another. Manual full backup export opens a Files save dialog and does
   not depend on automatic cloud-backup configuration.
-- Overview must lead with category spending, monthly trends, and year comparisons,
-  as explicitly selected by the user. Use exact amounts, separate pending, leave
-  missing periods unknown, and provide transaction drilldowns. See
+- Overview uses the newer two-chart design described above, superseding the
+  earlier category/month/year-comparison layout. Use exact amounts, separate
+  pending, leave missing periods unknown, and provide inline transaction context. See
   [current flow](docs/review-flow.md); the old HTML preview is historical for these
   additions. Native chart/file-provider UI still needs Mac/iPad validation.
 

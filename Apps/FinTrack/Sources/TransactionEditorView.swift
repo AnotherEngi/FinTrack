@@ -14,6 +14,8 @@ struct TransactionEditorView: View {
     @State private var draftWriteFailed = false
     @State private var pendingRequest: ReviewRequest?
     @State private var showDiscussion = false
+    @State private var showRefundPurchases = false
+    @State private var refundSearch = ""
     @FocusState private var noteFocused: Bool
 
     init(ledger: LedgerViewModel, draft: EditorDraft, startDiscussion: Bool = false,
@@ -25,6 +27,17 @@ struct TransactionEditorView: View {
     }
 
     private var currentRecord: LedgerTransaction? { ledger.record(id: draft.id) }
+
+    private var refundPurchaseCandidates: [LedgerTransaction] {
+        let linkedIDs = Set((draft.input.refundAllocations ?? []).map(\.purchaseID))
+        return ledger.records.filter { record in
+            guard record.id != draft.id, record.draft.treatment == .spending,
+                  record.draft.postingStatus == .posted, record.draft.date.iso8601 <= draft.input.dateText,
+                  !linkedIDs.contains(record.id) else { return false }
+            return refundSearch.isEmpty || record.draft.payee.localizedCaseInsensitiveContains(refundSearch)
+                || record.draft.date.iso8601.contains(refundSearch)
+        }
+    }
 
     var body: some View {
         NavigationStack {
@@ -67,6 +80,7 @@ struct TransactionEditorView: View {
                     Text("Exceptional Events remain included in shown spending.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
+                if draft.input.treatment == .refund || !(draft.input.refundAllocations ?? []).isEmpty { refundSection }
                 Section("Your Note to ChatGPT") {
                     TextField("Your note", text: $draft.input.notes, axis: .vertical).lineLimit(3...8)
                         .focused($noteFocused)
@@ -133,6 +147,7 @@ struct TransactionEditorView: View {
             .task { if startDiscussion { noteFocused = true } }
             .interactiveDismissDisabled(draftWriteFailed)
             .sheet(isPresented: $showDiscussion) { DiscussionDetailView(ledger: ledger, recordID: draft.id) }
+            .sheet(isPresented: $showRefundPurchases) { refundPurchasePicker }
             .confirmationDialog("Discard unsaved input? Previously saved edits will remain.",
                                 isPresented: $discardConfirmation, titleVisibility: .visible) {
                 Button("Discard Unsaved Draft", role: .destructive) {
@@ -140,6 +155,53 @@ struct TransactionEditorView: View {
                     catch { status = "Unable to discard draft: \(error.localizedDescription)" }
                 }
             }
+        }
+    }
+
+    private var refundSection: some View {
+        Section("Refund applies to") {
+            Text("Link the original purchases and enter a positive amount for each. The summary reduces their purchase dates and categories; this refund keeps its bank date. Any unallocated amount stays flagged for linking.")
+                .font(.caption).foregroundStyle(.secondary)
+            ForEach(draft.input.refundAllocations ?? []) { link in
+                VStack(alignment: .leading) {
+                    if let purchase = ledger.record(id: link.purchaseID) {
+                        Text(purchase.draft.payee + " · " + (purchase.draft.activityDate ?? purchase.draft.date).iso8601)
+                    } else { Text("Missing purchase").foregroundStyle(.red) }
+                    HStack {
+                        TextField("Refund amount for this purchase", text: Binding(
+                            get: { draft.input.refundAllocations?.first { $0.purchaseID == link.purchaseID }?.amountText ?? "" },
+                            set: { text in
+                                if let index = draft.input.refundAllocations?.firstIndex(where: { $0.purchaseID == link.purchaseID }) {
+                                    draft.input.refundAllocations?[index].amountText = text
+                                }
+                            }))
+                            .keyboardType(.decimalPad)
+                        Button("Remove", role: .destructive) {
+                            draft.input.refundAllocations?.removeAll { $0.purchaseID == link.purchaseID }
+                        }.buttonStyle(.borderless)
+                    }
+                }
+            }
+            Button("Link a Purchase", systemImage: "link") { showRefundPurchases = true }
+                .disabled((draft.input.refundAllocations?.count ?? 0) >= 100)
+        }
+    }
+
+    private var refundPurchasePicker: some View {
+        NavigationStack {
+            List {
+                if refundPurchaseCandidates.isEmpty { Text("No matching posted purchases. Add or import the original purchase first.").foregroundStyle(.secondary) }
+                ForEach(refundPurchaseCandidates) { purchase in
+                    Button {
+                        if draft.input.refundAllocations == nil { draft.input.refundAllocations = [] }
+                        draft.input.refundAllocations?.append(RefundAllocationInput(purchaseID: purchase.id))
+                        showRefundPurchases = false
+                    } label: { LedgerRecordRow(record: purchase, catalog: ledger.catalog) }
+                }
+            }
+            .searchable(text: $refundSearch, prompt: "Find the original purchase")
+            .navigationTitle("Link a Purchase").navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { showRefundPurchases = false } } }
         }
     }
 

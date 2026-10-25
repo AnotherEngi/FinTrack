@@ -97,7 +97,7 @@ struct TransactionListView: View {
     @State private var amalgamate = false
     @State private var sort = TransactionTableSort()
     @State private var showExport = false
-    @State private var reviewPage = ReviewPage.send
+    @State private var showImport = false
     @State private var discussionRecord: LedgerTransaction?
     @State private var pendingRequest: ReviewRequest?
 
@@ -162,12 +162,12 @@ struct TransactionListView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
-                    Button { reviewPage = .send; showExport = true } label: {
+                    Button { showExport = true } label: {
                         Label("Review with ChatGPT", systemImage: "square.and.arrow.up").labelStyle(.titleAndIcon)
                     }.accessibilityLabel("Prepare review for ChatGPT").help("Prepare pending feedback or full history")
                 }
                 ToolbarItem(placement: .primaryAction) {
-                    Button { reviewPage = .inbox; showExport = true } label: {
+                    Button { showImport = true } label: {
                         Label("Import reply", systemImage: "square.and.arrow.down")
                     }.accessibilityLabel("Import a ChatGPT reply or weekly transactions")
                 }
@@ -197,8 +197,9 @@ struct TransactionListView: View {
                     .id(draft.id)
             }
             .sheet(isPresented: $showExport) {
-                ReviewExportView(ledger: ledger, showsDone: true, initialPage: reviewPage)
+                SendReviewView(ledger: ledger)
             }
+            .sheet(isPresented: $showImport) { ImportReviewView(ledger: ledger) }
             .sheet(item: $discussionRecord) { record in
                 DiscussionDetailView(ledger: ledger, recordID: record.id)
             }

@@ -18,6 +18,14 @@ final class LedgerViewModel {
     private(set) var backup: CloudBackup?
     var message: String?
 
+    func saveSummaryVisibility(_ value: SummaryVisibility) {
+        do {
+            guard let repository else { throw LedgerError.recordNotFound }
+            try repository.saveSummaryVisibility(value)
+            reload()
+        } catch { message = "Visibility settings were not saved: " + error.localizedDescription }
+    }
+
     init() {
         do { try Self.cleanupPreparedFiles() }
         catch { message = "Older temporary review files could not be removed: \(error.localizedDescription)" }

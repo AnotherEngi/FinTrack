@@ -13,6 +13,7 @@ public struct TransactionDraft: Codable, Equatable, Sendable {
     public var exceptionalEvent: Bool
     public var activityDate: TransactionDate?
     public var source: TransactionSource?
+    public var refundAllocations: [RefundAllocation]?
     public let legacyReviewStatus: LegacyReviewStatus?
 
     public init(date: TransactionDate, payee: String, amount: Money,
@@ -20,7 +21,7 @@ public struct TransactionDraft: Codable, Equatable, Sendable {
                 treatment: TransactionTreatment = .unresolved, categoryID: String? = nil,
                 tags: [String] = [], exceptionalEvent: Bool = false,
                 activityDate: TransactionDate? = nil, legacyReviewStatus: LegacyReviewStatus? = nil,
-                source: TransactionSource? = nil) {
+                source: TransactionSource? = nil, refundAllocations: [RefundAllocation]? = nil) {
         self.date = date
         self.payee = payee
         self.amount = amount
@@ -34,9 +35,24 @@ public struct TransactionDraft: Codable, Equatable, Sendable {
         self.activityDate = activityDate
         self.legacyReviewStatus = legacyReviewStatus
         self.source = source
+        self.refundAllocations = refundAllocations
     }
 
     public func validate() throws {
+        let links = refundAllocations ?? []
+        guard links.count <= 100, Set(links.map(\.purchaseID)).count == links.count else {
+            throw ExchangeError.invalid("A refund can link to each purchase once, with at most 100 allocations.")
+        }
+        var allocated: Int64 = 0
+        for link in links {
+            let (sum, overflow) = allocated.addingReportingOverflow(link.amount.minorUnits)
+            guard treatment == .refund, postingStatus == .posted,
+                  link.amount.minorUnits > 0, link.amount.currency == amount.currency, !overflow,
+                  UInt64(sum) <= amount.minorUnits.magnitude else {
+                throw ExchangeError.invalid("Enter positive allocations within the posted refund amount, in the same currency.")
+            }
+            allocated = sum
+        }
         if let source {
             guard !source.label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                   source.label.count <= 120 else { throw ReviewError.invalidSource }
@@ -59,11 +75,12 @@ public struct TransactionDraft: Codable, Equatable, Sendable {
             || amount != old.amount || postingStatus != old.postingStatus || treatment != old.treatment
             || categoryID != old.categoryID || Set(tags) != Set(old.tags)
             || exceptionalEvent != old.exceptionalEvent || source != old.source
+            || (refundAllocations ?? []) != (old.refundAllocations ?? [])
     }
 
     private enum CodingKeys: String, CodingKey {
         case date, payee, amount, notes, answer, postingStatus, treatment, categoryID
-        case tags, exceptionalEvent, activityDate, legacyReviewStatus, reviewStatus, source
+        case tags, exceptionalEvent, activityDate, legacyReviewStatus, reviewStatus, source, refundAllocations
     }
 
     public init(from decoder: any Decoder) throws {
@@ -81,7 +98,8 @@ public struct TransactionDraft: Codable, Equatable, Sendable {
             activityDate: values.decodeIfPresent(TransactionDate.self, forKey: .activityDate),
             legacyReviewStatus: values.decodeIfPresent(LegacyReviewStatus.self, forKey: .legacyReviewStatus)
                 ?? values.decodeIfPresent(LegacyReviewStatus.self, forKey: .reviewStatus),
-            source: values.decodeIfPresent(TransactionSource.self, forKey: .source))
+            source: values.decodeIfPresent(TransactionSource.self, forKey: .source),
+            refundAllocations: values.decodeIfPresent([RefundAllocation].self, forKey: .refundAllocations))
     }
 
     public func encode(to encoder: any Encoder) throws {
@@ -99,6 +117,7 @@ public struct TransactionDraft: Codable, Equatable, Sendable {
         try values.encodeIfPresent(activityDate, forKey: .activityDate)
         try values.encodeIfPresent(legacyReviewStatus, forKey: .legacyReviewStatus)
         try values.encodeIfPresent(source, forKey: .source)
+        try values.encodeIfPresent(refundAllocations, forKey: .refundAllocations)
     }
 }
 

@@ -48,6 +48,7 @@ public struct ReviewPacket: Codable, Sendable {
         public let userNote: String?
         public let userAnswer: String?
         public let assistantContext: AssistantContext?
+        public let refundAllocations: [RefundAllocation]?
     }
 }
 
@@ -85,7 +86,8 @@ public struct ReviewExport: Sendable {
                 classificationProvenance: record.classificationProvenance,
                 userNote: options.includeUserContext ? record.draft.notes : nil,
                 userAnswer: options.includeUserContext ? record.draft.answer : nil,
-                assistantContext: options.includeAssistantContext ? record.assistantContext : nil)
+                assistantContext: options.includeAssistantContext ? record.assistantContext : nil,
+                refundAllocations: record.draft.refundAllocations)
         }
         packet = ReviewPacket(schemaVersion: 1, purpose: "fintrack-review-export",
             packetID: packetID, exportedAt: ISO8601DateFormatter().string(from: exportedAt),
@@ -100,7 +102,7 @@ public struct ReviewExport: Sendable {
         var columns = ["transaction_id", "base_revision", "date", "activity_date", "payee",
             "amount_minor_units", "amount_decimal", "currency", "posting_status", "treatment",
             "source_id", "source_label", "category_id", "category_label", "tags_json", "exceptional_event", "approval", "discussion_requested",
-            "discussion_progress", "category_origin", "tag_origins_json"]
+            "discussion_progress", "category_origin", "tag_origins_json", "refund_allocations_json"]
         if options.includeUserContext { columns += ["user_note", "user_answer"] }
         if options.includeAssistantContext { columns += ["assistant_question", "assistant_reason", "earlier_ledger_notes"] }
         var lines = [columns.map(Self.csvCell).joined(separator: ",")]
@@ -116,7 +118,8 @@ public struct ReviewExport: Sendable {
                 Self.csvCell(String(row.exceptionalEvent)), Self.csvCell(row.approval.rawValue),
                 Self.csvCell(String(row.discussionRequested)), Self.csvCell(row.discussionProgress?.rawValue ?? ""),
                 Self.csvCell(row.classificationProvenance.category.rawValue),
-                Self.csvCell(String(decoding: try encoder.encode(row.classificationProvenance.tags), as: UTF8.self))]
+                Self.csvCell(String(decoding: try encoder.encode(row.classificationProvenance.tags), as: UTF8.self)),
+                Self.csvCell(String(decoding: try encoder.encode(row.refundAllocations ?? []), as: UTF8.self))]
             if options.includeUserContext { cells += [Self.csvCell(row.userNote ?? ""), Self.csvCell(row.userAnswer ?? "")] }
             if let context = row.assistantContext {
                 cells += [Self.csvCell(context.question), Self.csvCell(context.reason), Self.csvCell(context.ledgerNotes)]
@@ -159,8 +162,11 @@ public struct ReviewExport: Sendable {
         Incorporate feedback given in this chat into the explanation without presenting
         it as an already-applied app change. Do not claim access to other chats or accounts.
 
-        FinTrack currently exports only: importing suggestions is not implemented.
-        Present suggestions for the user's review and manual editing in FinTrack.
+        This snapshot companion is read-only. To return importable answers or changes,
+        use the returnTemplate in the app's prepared fintrack-review-request envelope.
+        Refund allocations are positive amounts linked to original purchase IDs;
+        reduce spending at those purchases' activity dates (posted dates when unknown),
+        using the purchases' categories. Do not guess links for unallocated refunds.
         This packet is not a backup or replacement ledger, and no changes are applied
         by exporting it or returning an analysis.
         """

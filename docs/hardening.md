@@ -1,5 +1,35 @@
 # Exchange and backup hardening pass
 
+## 2026-10-25 Overview and refund source review
+
+The new batch has undergone source review only; no terminal commands or tests
+were run because the user's human-run-command preference remains active.
+Eleven portable and three Apple persistence regressions were authored, not run.
+See [design and verification](design/overview.md) for the pending device checks.
+
+- Removed selection-driven chart modals and built-in hover selection bindings;
+  explicit spatial tap gestures update only the inline purchases panel.
+- Send/Import toolbar paths now present independent screens without a page picker.
+- Visibility saves only workspace preferences atomically, advances the backup
+  generation, and leaves ledger revisions, feedback, and exports intact.
+- Refund allocations validate per-refund and aggregate purchase caps, IDs,
+  posting/treatment/currency, and chronology. Insert, edit, source reconciliation,
+  summary, review preparation, and backup restore enforce relevant invariants.
+- Preserve old optional payloads and extreme Int64.min refund values for record
+  management/export; use unsigned magnitude to avoid negation overflow. A summary
+  that cannot represent a positive remainder fails visibly without altering data.
+- Purchase-date filtering runs after applying all linked refunds, so a refund
+  outside the visible date range still adjusts its original purchase. Unallocated
+  amounts are flagged, never used as negative pie slices or guessed matches.
+- Keep allocation controls visible while an invalid treatment edit retains links,
+  so the user can correct or remove them. Raw incomplete allocation input uses
+  the existing durable draft path and cannot overwrite valid saved records.
+- Export allocation amounts as integer strings and supply related purchase/refund
+  context. The incoming contract remains classification/discussion-only.
+
+Native type checking, chart hit testing, actual landscape fit, file providers,
+SwiftData rollback/reopen, and iCloud upload/restore remain unverified for this batch.
+
 ## Additional final pass requested by the user
 
 Completed 2026-10-24 after the discussion/chart follow-up. All **83** portable

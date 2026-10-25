@@ -6,7 +6,17 @@ full-history review, incoming receipts/proposals, weekly source-ID intake,
 classification guidance, user-selected-folder automatic iCloud backup, and full
 backup export/restore. Schema V3 migration and these native flows await Mac/iPad
 validation. No cloud record sync or LLM API requests.
-Updated 2026-10-24.
+Updated 2026-10-25.
+
+Latest user decisions supersede the previous three-chart Overview and transfer
+tabs: [Overview, Visibility, and purchase-date refunds](design/overview.md).
+Source now has two side-by-side charts with temporary category switches and an
+inline selection panel, explicit pointer/touch clicks, persistent summary-only
+visibility rules in backed-up workspace state, separate Send/Import/Backup
+screens, and editable refund links to original purchases. Refunds reduce the
+original purchase dates/categories; unallocated refunds need linking. No new
+SwiftData entity migration or cloud sync. This batch has **not** been built,
+tested, committed, or pushed; previous verification counts below are historical.
 
 Latest iPad feedback changes: see [discussion and spending flow](review-flow.md).
 The user confirmed separate replies versus financial edits, and category/month/
@@ -16,8 +26,8 @@ replaces Questions; replies/resolution/drafts are durable, with a question colum
 in Transactions. Send/Import/Backup pages are separate, prepared files lock and
 identify their mode, and manual full-backup export opens Files independently.
 Import records matching acknowledgements automatically; only actual record
-changes offer Apply changes/Keep current. Current verification: 83 portable tests
-pass; 14 Apple files parse, 27 Apple persistence tests await Mac execution.
+changes offer Apply changes/Keep current. Previous-revision verification: 83
+portable tests passed; 14 Apple files parsed, 27 Apple persistence tests awaited Mac execution.
 Confirmed constraints below come from the user. Proposed designs remain open until
 selected; documentation verification does not establish account or device access.
 

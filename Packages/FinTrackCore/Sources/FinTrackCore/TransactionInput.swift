@@ -17,6 +17,7 @@ public struct TransactionInput: Codable, Equatable, Sendable {
     public var sourceLabel: String
     public let sourceID: UUID
     private var originalTags: [String]? = nil
+    public var refundAllocations: [RefundAllocationInput]?
 
     public init(dateText: String, activityDateText: String = "", payee: String = "",
                 amountText: String = "", notes: String = "", answer: String = "",
@@ -48,6 +49,7 @@ public struct TransactionInput: Codable, Equatable, Sendable {
             exceptionalEvent: draft.exceptionalEvent, legacyReviewStatus: draft.legacyReviewStatus,
             sourceLabel: draft.source?.label ?? "", sourceID: draft.source?.id ?? UUID())
         originalTags = draft.tags
+        refundAllocations = draft.refundAllocations?.map { RefundAllocationInput(purchaseID: $0.purchaseID, amountText: $0.amount.decimalText) }
     }
 
     public func value() throws -> TransactionDraft {
@@ -62,14 +64,15 @@ public struct TransactionInput: Codable, Equatable, Sendable {
             exceptionalEvent: exceptionalEvent, activityDate: activity.isEmpty ? nil : TransactionDate(activity),
             legacyReviewStatus: legacyReviewStatus,
             source: sourceLabel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil
-                : TransactionSource(id: sourceID, label: sourceLabel.trimmingCharacters(in: .whitespacesAndNewlines)))
+                : TransactionSource(id: sourceID, label: sourceLabel.trimmingCharacters(in: .whitespacesAndNewlines)),
+            refundAllocations: try refundAllocations?.map { try RefundAllocation(purchaseID: $0.purchaseID, amount: Money(decimalText: $0.amountText)) })
         try draft.validate()
         return draft
     }
 
     private enum CodingKeys: String, CodingKey {
         case dateText, activityDateText, payee, amountText, notes, answer, postingStatus
-        case treatment, categoryID, tagsText, exceptionalEvent, legacyReviewStatus, sourceLabel, sourceID, originalTags
+        case treatment, categoryID, tagsText, exceptionalEvent, legacyReviewStatus, sourceLabel, sourceID, originalTags, refundAllocations
     }
     private enum LegacyKeys: String, CodingKey { case reviewStatus }
 
@@ -92,5 +95,13 @@ public struct TransactionInput: Codable, Equatable, Sendable {
             sourceLabel: values.decodeIfPresent(String.self, forKey: .sourceLabel) ?? "",
             sourceID: values.decodeIfPresent(UUID.self, forKey: .sourceID) ?? UUID())
         originalTags = try values.decodeIfPresent([String].self, forKey: .originalTags)
+        refundAllocations = try values.decodeIfPresent([RefundAllocationInput].self, forKey: .refundAllocations)
     }
+}
+
+public struct RefundAllocationInput: Codable, Equatable, Identifiable, Sendable {
+    public var id: UUID { purchaseID }
+    public var purchaseID: UUID
+    public var amountText: String
+    public init(purchaseID: UUID, amountText: String = "") { self.purchaseID = purchaseID; self.amountText = amountText }
 }

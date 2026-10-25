@@ -93,6 +93,7 @@ public final class LocalTransactionRepository: TransactionRepository {
         guard try row(id: transaction.id) == nil else { throw LedgerError.duplicateID }
         try transaction.draft.validate()
         try transaction.validateReviewState(catalog: catalog)
+        try RefundAccounting.validate(records: fetchAll() + [transaction])
         var workspace = try self.workspace()
         workspace.establishBaseline(records: try fetchAll())
         workspace.recordUserChange(before: nil, after: transaction)
@@ -109,6 +110,7 @@ public final class LocalTransactionRepository: TransactionRepository {
         let current = try stored.value()
         let updated = try current.revising(with: draft, expectedRevision: expectedRevision)
         try updated.validateReviewState(catalog: catalog)
+        try RefundAccounting.validate(records: fetchAll().map { $0.id == id ? updated : $0 })
         if updated != current {
             var workspace = try self.workspace()
             workspace.establishBaseline(records: try fetchAll())
@@ -233,6 +235,15 @@ public final class LocalTransactionRepository: TransactionRepository {
         var workspace = try self.workspace()
         guard workspace.drafts[id.uuidString] != data else { return }
         workspace.drafts[id.uuidString] = data
+        try committing { try writeWorkspace(workspace) }
+    }
+
+    public func saveSummaryVisibility(_ value: SummaryVisibility) throws {
+        try value.validate(recordIDs: Set(fetchAll().map(\.id)))
+        var workspace = try self.workspace()
+        guard (workspace.summaryVisibility ?? SummaryVisibility()) != value else { return }
+        workspace.summaryVisibility = value
+        // Display preferences are backed up, but never create financial edits or AI feedback.
         try committing { try writeWorkspace(workspace) }
     }
 
@@ -409,6 +420,7 @@ public final class LocalTransactionRepository: TransactionRepository {
                 category: facts.categoryID == nil ? .unknown : .assistant, tags: origins))
         }
         try saved.validateReviewState(catalog: catalog)
+        try RefundAccounting.validate(records: all.filter { $0.id != saved.id } + [saved])
         if let linkIndex { workspace.sourceLinks[linkIndex].latest = source }
         else { workspace.sourceLinks.append(SourceLink(identity: identity, recordID: saved.id, original: source)) }
         try committing {

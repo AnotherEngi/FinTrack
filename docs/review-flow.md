@@ -1,5 +1,11 @@
 # Discussions, review files, and spending views
 
+2026-10-25 update: [Overview and visibility](design/overview.md) supersedes the
+Overview and transfer-page descriptions below. Send/Import/Backup are separate
+screens with no shared page picker. Overview now has two charts, temporary
+category toggles, inline click-only purchase selection, persistent Visibility,
+and refunds allocated to original purchase dates. This new batch awaits tests.
+
 Updated from physical-iPad feedback on 2026-10-24. The user confirmed separate
 discussion/record-change flows and category/month/year spending visualizations.
 
@@ -66,11 +72,12 @@ SwiftData V3 entity schema is unchanged. A new resolveDiscussion action is store
 in review history. Older app binaries do not understand that action; do not
 downgrade after saving new actions.
 
-## Send, import, and backup are separate pages
+## Send, import, and backup are separate screens
 
-Review & backup has Send to ChatGPT, Import reply, and Backup pages. The up-arrow
-prepares/shares outgoing work; the down-arrow imports replies/weekly data. The
-backup status strip opens Backup directly.
+Review & backup launches independent Send to ChatGPT, Import reply, and Backup
+screens. Each has a fixed purpose, with no segmented picker or navigation into
+the other transfer screen. The up-arrow prepares/shares outgoing work; the
+down-arrow imports replies/weekly data. The backup strip opens Backup directly.
 
 Choosing Review with ChatGPT or Full History Review freezes that prepared file
 and disables both choices. Its heading explicitly identifies Pending feedback
@@ -85,23 +92,25 @@ apparent no-op. Saving a manual file is separate from automatic cloud confirmati
 
 ## Overview
 
-The overview now uses native Swift Charts, not a list of review counts:
+Overview has a category-colored stacked bar chart and a matching full-range pie,
+side by side. Temporary category switches below the bars control both charts.
+The panel below the pie starts empty; an explicit bar click selects its entire
+period, and a pie click selects its category. Hover never opens a modal. Weeks,
+months, or years are chosen from the selected duration. See the
+[current design](design/overview.md) for date bounds, reset behavior, and testing.
 
-- Category bars show where posted spending goes, including negative refund totals.
-- Monthly bars show observed spending through time.
-- Calendar-month lines/points compare available years. Missing months break line
-  segments; they are never filled with invented zeroes. Partial years have explicit
-  coverage limits, not misleading percentage comparisons.
-
-Totals/grouping remain exact integer minor units. Charts receive integer coordinates;
-no floating-point accounting totals are introduced. Pending charges stay separate.
-Date presets/custom dates and category/tag/Exceptional Event exclusions affect
-display only. Tap category/month values to inspect their actual transactions.
+Visibility persistently hides records by ID/category/tag from Overview only;
+Show hidden bypasses those rules. Exports and the ledger retain all records.
+Linked refunds reduce their original purchase dates/categories even when the
+refund arrived outside the visible range. Unallocated refunds are listed for
+linking rather than plotted as negative spending. Exact integer totals and
+separate pending charges remain; income/payments/transfers are outside spending.
 
 Use Add Synthetic Chart Examples in Overview's secondary toolbar actions to
 append fictional prior/current-year data. At 2026-10-24 this adds 66 records.
 Stable IDs make repeat loads harmless and preserve edits. Nothing loads implicitly.
 
-Native chart APIs follow [Apple's chart interaction documentation](https://developer.apple.com/videos/play/wwdc2023/10037/).
-Windows verifies portable models/contracts; SwiftUI/Charts/SwiftData/file-save UI
-still require the [combined Mac/iPad check](ipad-acceptance.md).
+Explicit click geometry uses Apple's [ChartProxy](https://developer.apple.com/documentation/charts/chartproxy)
+and [angle conversion](https://developer.apple.com/documentation/charts/chartproxy/value%28atangle%3Aas%3A%29).
+This batch has not been tested. Portable models can be tested on Windows;
+SwiftUI/Charts/SwiftData/file-save UI require the [Mac/iPad check](ipad-acceptance.md).

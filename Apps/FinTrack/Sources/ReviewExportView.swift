@@ -2,19 +2,59 @@ import SwiftUI
 import UniformTypeIdentifiers
 import FinTrackCore
 
-enum ReviewPage: String, CaseIterable {
+private enum ReviewPage: String, CaseIterable, Identifiable, Hashable {
     case send = "Send to ChatGPT", inbox = "Import reply", backup = "Backup"
+    var id: Self { self }
 }
 
 @MainActor
 struct ReviewExportView: View {
     @Bindable var ledger: LedgerViewModel
-    var showsDone = false
+    @State private var destination: ReviewPage?
+    var body: some View {
+        NavigationStack {
+            List {
+                Button("Send to ChatGPT", systemImage: "square.and.arrow.up") { destination = .send }
+                Button("Import ChatGPT Reply or Weekly File", systemImage: "square.and.arrow.down") { destination = .inbox }
+                Button("Backup", systemImage: "externaldrive") { destination = .backup }
+            }
+            .sheet(item: $destination) { page in
+                switch page {
+                case .send: SendReviewView(ledger: ledger)
+                case .inbox: ImportReviewView(ledger: ledger)
+                case .backup: BackupSettingsView(ledger: ledger)
+                }
+            }
+        }
+    }
+}
+
+@MainActor
+struct SendReviewView: View {
+    var ledger: LedgerViewModel
+    var body: some View { TransferForm(ledger: ledger, page: .send) }
+}
+
+@MainActor
+struct ImportReviewView: View {
+    var ledger: LedgerViewModel
+    var body: some View { TransferForm(ledger: ledger, page: .inbox) }
+}
+
+@MainActor
+struct BackupSettingsView: View {
+    var ledger: LedgerViewModel
+    var body: some View { TransferForm(ledger: ledger, page: .backup) }
+}
+
+@MainActor
+private struct TransferForm: View {
+    @Bindable var ledger: LedgerViewModel
+    let page: ReviewPage
     @Environment(\.dismiss) private var dismiss
     @State private var preparedFile: URL?
     @State private var preparedMode: ReviewMode?
     @State private var preparedGeneration: UUID?
-    @State private var page: ReviewPage
     @State private var backupDocument: BackupFileDocument?
     @State private var showBackupExporter = false
     @State private var backupNotice: String?
@@ -28,16 +68,9 @@ struct ReviewExportView: View {
     @State private var failure: String?
     @State private var working = false
 
-    init(ledger: LedgerViewModel, showsDone: Bool = false, initialPage: ReviewPage = .send) {
-        self.ledger = ledger; self.showsDone = showsDone; _page = State(initialValue: initialPage)
-    }
-
     var body: some View {
         NavigationStack {
             List {
-                Picker("Review tools", selection: $page) {
-                    ForEach(ReviewPage.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-                }.pickerStyle(.segmented).listRowBackground(Color.clear)
                 if page == .send {
                     reviewSection
                     if let preparedFile {
@@ -75,9 +108,10 @@ struct ReviewExportView: View {
                 if page == .backup { backupSection }
             }
             .disabled(working)
+            .navigationTitle(page.rawValue)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                if showsDone { ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() }.disabled(working) } }
+                ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() }.disabled(working) }
             }
             .fileImporter(isPresented: $showFilePicker, allowedContentTypes: filePurpose == .folder ? [.folder] : [.json]) {
                 handleSelection($0)

@@ -6,43 +6,47 @@ import FinTrackCore
 struct OverviewView: View {
     @Bindable var ledger: LedgerViewModel
     var openReview: () -> Void
+    @Environment(\.scenePhase) private var scenePhase
     @State private var scope = DisplayScope()
-    @State private var excludedTags: Set<String> = []
     @State private var excludedCategories: Set<String> = []
-    @State private var excludeEvents = false
-    @State private var selectedCategory: String?
-    @State private var selectedMonth: String?
-    @State private var seasonalMonth: Int?
-    @State private var drilldown: SpendingBucket?
+    @State private var showHidden = false
+    @State private var selection: SummaryContext?
+    @State private var editor: EditorDraft?
 
-    private var records: [LedgerTransaction] {
-        let selection = LedgerSelection(excludedTags: excludedTags, excludeExceptionalEvents: excludeEvents)
-        return selection.records(in: scope.selection.records(in: ledger.records)).filter {
-            !excludedCategories.contains($0.draft.categoryID ?? "")
-        }
+    private enum SummaryContext: Equatable { case period(String), category(String), unallocated }
+    private var visibility: SummaryVisibility { ledger.workspace.summaryVisibility ?? .init() }
+    private var rangeKey: String {
+        let bounds = scope.selection
+        return scope.period.rawValue + ":" + (bounds.from?.iso8601 ?? "") + ":" + (bounds.through?.iso8601 ?? "")
+    }
+
+    private func report(excluding categories: Set<String>) throws -> SummaryReport {
+        guard scope.isValid else { throw LedgerError.invalidDate }
+        return try SummaryReport(records: ledger.records, catalog: ledger.catalog,
+            from: scope.selection.from, through: scope.selection.through,
+            visibility: visibility, showHidden: showHidden, excludedCategories: categories)
     }
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    scopeControls
-                    if let data = try? SpendingCharts(records: records, catalog: ledger.catalog) {
-                        totals(data)
-                        if data.months.isEmpty {
-                            ContentUnavailableView("No spending in this view", systemImage: "chart.bar",
-                                description: Text("Add transactions or change the dates and filters."))
-                            Button("Open Transactions", action: openReview)
-                        } else {
-                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 360), alignment: .top)], alignment: .leading, spacing: 18) {
-                                categoryCard(data)
-                                monthCard(data)
-                            }
-                            seasonalCard(data)
+            GeometryReader { geometry in
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(spacing: 16) {
+                        DisplayScopeControls(scope: $scope)
+                        Spacer(minLength: 0)
+                        Toggle("Show hidden", isOn: $showHidden).fixedSize()
+                    }
+                    switch Result(catching: { try report(excluding: []) }) {
+                    case .success(let base):
+                        switch Result(catching: { excludedCategories.isEmpty ? base : try report(excluding: excludedCategories) }) {
+                        case .success(let data): dashboard(data, legend: base.categories, height: geometry.size.height)
+                        case .failure(let error): failure(error)
                         }
-                    } else { Text("These totals exceed the supported amount range.").foregroundStyle(.red) }
-                    filters
-                }.padding(18)
+                    case .failure(let error): failure(error)
+                    }
+                }
+                .padding(14)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
             .background(Color(.systemGroupedBackground))
             .navigationBarTitleDisplayMode(.inline)
@@ -51,138 +55,305 @@ struct OverviewView: View {
                     Button("Add Synthetic Chart Examples", systemImage: "testtube.2") { ledger.loadSpendingSamples() }
                 }
             }
-            .sheet(item: $drilldown, onDismiss: { selectedCategory = nil; selectedMonth = nil }) { bucket in
-                NavigationStack {
-                    RecordCollectionView(ledger: ledger, recordIDs: bucket.recordIDs, title: bucket.label)
-                }
+            .onChange(of: rangeKey) { _, _ in resetTemporaryFilters() }
+            .onChange(of: showHidden) { _, _ in selection = nil }
+            .onChange(of: visibility) { _, _ in selection = nil }
+            .onChange(of: scenePhase) { _, phase in if phase == .background { resetTemporaryFilters() } }
+            .sheet(item: $editor, onDismiss: { ledger.reload() }) { draft in
+                TransactionEditorView(ledger: ledger, draft: draft) { _ in }.id(draft.id)
             }
-            .refreshable { ledger.reload() }
         }
     }
 
-    private var scopeControls: some View {
+    private func failure(_ error: Error) -> some View {
+        VStack(alignment: .leading) {
+            Label("Unable to calculate this summary", systemImage: "exclamationmark.triangle")
+            Text(error.localizedDescription).font(.callout)
+            Button("Open Transactions", action: openReview)
+        }.foregroundStyle(.red)
+    }
+
+    private func dashboard(_ data: SummaryReport, legend: [SummaryCategory], height: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            DisplayScopeControls(scope: $scope)
-            Text("Posted spending, with refunds deducted. Pending charges stay separate. Saved history may be incomplete; missing months are unknown.")
-                .font(.caption).foregroundStyle(.secondary)
+            HStack(spacing: 20) {
+                Text("Spending " + data.total.decimalText).monospacedDigit()
+                Text("Pending " + data.pending.decimalText).monospacedDigit().foregroundStyle(.secondary)
+                Spacer()
+                if !data.unallocatedRefundIDs.isEmpty {
+                    Button("Link refunds: " + data.unallocatedRefundAmount.decimalText) { selection = .unallocated }
+                }
+            }.font(.callout)
+            HStack(alignment: .top, spacing: 14) {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        Text("Spending by " + data.interval.rawValue).font(.headline)
+                        Spacer()
+                        Menu("Select period") {
+                            ForEach(Array(Set(data.bars.map(\.periodID))).sorted(), id: \.self) { period in
+                                Button(periodLabel(period, interval: data.interval)) { selection = .period(period) }
+                            }
+                        }.font(.caption)
+                    }
+                    barChart(data).frame(height: chartHeight(height))
+                    Divider()
+                    categoryLegend(legend)
+                }
+                .padding(12).frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14))
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Categories · full selected range").font(.headline)
+                    pieChart(data).frame(height: chartHeight(height))
+                    Divider()
+                    purchasesPanel(data)
+                }
+                .padding(12).frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14))
+            }.frame(maxHeight: .infinity)
+            Text("Linked refunds reduce original purchase dates. Unlinked refunds need allocation. Missing history is unknown.")
+                .font(.caption2).foregroundStyle(.secondary)
         }
     }
 
-    private func totals(_ data: SpendingCharts) -> some View {
-        HStack(spacing: 28) {
-            VStack(alignment: .leading) { Text("Spending").font(.caption); Text(data.totals.posted.decimalText).font(.title2.monospacedDigit()) }
-            VStack(alignment: .leading) { Text("Pending").font(.caption); Text(data.totals.pending.decimalText).font(.title3.monospacedDigit()) }
-            Spacer()
+    private func chartHeight(_ available: CGFloat) -> CGFloat { max(100, min(270, available * 0.38)) }
+
+    private func barChart(_ data: SummaryReport) -> some View {
+        Chart(data.bars) { bar in
+            BarMark(x: .value("Period", bar.periodID), y: .value("Spending", Int(bar.amount.minorUnits)))
+                .foregroundStyle(by: .value("Category", bar.categoryID))
+                .opacity(isSelected(period: bar.periodID) ? 1 : 0.55)
+                .accessibilityLabel(periodLabel(bar.periodID, interval: data.interval) + ", " + categoryLabel(bar.categoryID))
+                .accessibilityValue(bar.amount.decimalText)
+        }
+        .chartLegend(.hidden)
+        .chartForegroundStyleScale(domain: data.categories.map(\.id), range: data.categories.map { categoryColor($0.id) })
+        .chartYAxis { moneyAxis }
+        .chartXAxis {
+            AxisMarks { value in
+                AxisValueLabel {
+                    if let period = value.as(String.self) { Text(periodLabel(period, interval: data.interval)).font(.caption2) }
+                }
+            }
+        }
+        .chartOverlay { proxy in
+            GeometryReader { geometry in
+                Rectangle().fill(.clear).contentShape(Rectangle())
+                    .gesture(SpatialTapGesture().onEnded { tap in
+                        guard let anchor = proxy.plotFrame else { return }
+                        let frame = geometry[anchor]
+                        guard frame.contains(tap.location),
+                              let period = proxy.value(atX: tap.location.x - frame.minX, as: String.self),
+                              let amount = proxy.value(atY: tap.location.y - frame.minY, as: Int.self) else { return }
+                        let total = data.bars.filter { $0.periodID == period }.reduce(Int64(0)) { $0 + $1.amount.minorUnits }
+                        guard total > 0, amount >= 0, Int64(amount) <= total else { return }
+                        selection = .period(period)
+                    })
+            }
+        }
+        .overlay { if data.bars.isEmpty { Text("No posted purchases in this view").foregroundStyle(.secondary) } }
+        .accessibilityHint("Click a bar or use Select period to list that period's purchases.")
+    }
+
+    private func pieChart(_ data: SummaryReport) -> some View {
+        let slices = data.categories.filter { $0.amount.minorUnits > 0 }
+        return Chart(slices) { category in
+            SectorMark(angle: .value("Spending", Int(category.amount.minorUnits)), innerRadius: .ratio(0), outerRadius: .ratio(1))
+                .foregroundStyle(by: .value("Category", category.id))
+                .opacity(isSelected(category: category.id) ? 1 : 0.55)
+                .accessibilityLabel(category.label).accessibilityValue(category.amount.decimalText)
+        }
+        .chartLegend(.hidden)
+        .chartForegroundStyleScale(domain: data.categories.map(\.id), range: data.categories.map { categoryColor($0.id) })
+        .chartOverlay { proxy in
+            GeometryReader { geometry in
+                Rectangle().fill(.clear).contentShape(Rectangle())
+                    .gesture(SpatialTapGesture().onEnded { tap in
+                        guard let anchor = proxy.plotFrame else { return }
+                        let frame = geometry[anchor]
+                        let dx = tap.location.x - frame.midX, dy = tap.location.y - frame.midY
+                        let radius = min(frame.width, frame.height) / 2
+                        guard dx * dx + dy * dy <= radius * radius, dx != 0 || dy != 0 else { return }
+                        // Floating point is used only for pointer geometry. All accounting
+                        // values, aggregation, and slice boundaries remain integer cents.
+                        var radians = atan2(Double(dx), Double(-dy))
+                        if radians < 0 { radians += 2 * .pi }
+                        guard let cents = proxy.value(atAngle: .radians(radians), as: Int.self) else { return }
+                        var end: Int64 = 0
+                        for category in slices {
+                            end += category.amount.minorUnits
+                            if Int64(cents) < end { selection = .category(category.id); break }
+                        }
+                    })
+            }
+        }
+        .overlay { if slices.isEmpty { Text("No net spending in this view").foregroundStyle(.secondary) } }
+        .accessibilityHint("Click a slice or its category name in the legend to list purchases.")
+    }
+
+    private func categoryLegend(_ categories: [SummaryCategory]) -> some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 6) {
+                if categories.isEmpty { Text("Categories appear when posted purchases are available.").foregroundStyle(.secondary) }
+                ForEach(categories) { category in
+                    HStack(spacing: 10) {
+                        Circle().fill(categoryColor(category.id)).frame(width: 12, height: 12)
+                        Button { selection = .category(category.id) } label: {
+                            HStack { Text(category.label); Spacer(); Text(category.amount.decimalText).monospacedDigit() }
+                        }.buttonStyle(.plain)
+                        Toggle("Include " + category.label, isOn: Binding(
+                            get: { !excludedCategories.contains(category.id) },
+                            set: { included in
+                                if included { excludedCategories.remove(category.id) } else { excludedCategories.insert(category.id) }
+                                selection = nil
+                            }))
+                            .labelsHidden().tint(categoryColor(category.id)).fixedSize()
+                    }.frame(minHeight: 44)
+                }
+            }
+        }.frame(maxHeight: .infinity)
+    }
+
+    private func purchasesPanel(_ data: SummaryReport) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(contextTitle(data)).font(.subheadline.bold())
+                Spacer()
+                if selection != nil { Button("Clear") { selection = nil }.font(.caption) }
+            }
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 10) {
+                    if selection == .unallocated {
+                        ForEach(ledger.records.filter { data.unallocatedRefundIDs.contains($0.id) }) { refund in
+                            Button { editor = ledger.editor(for: refund) } label: {
+                                HStack { Text(refund.draft.payee); Spacer(); Text(refund.draft.amount.decimalText).monospacedDigit() }
+                            }
+                            Text("Received " + refund.draft.date.iso8601 + " · open to link purchases").font(.caption).foregroundStyle(.secondary)
+                        }
+                    } else if let selection {
+                        let rows = selectedPurchases(data, context: selection)
+                        if rows.isEmpty { Text("No purchases in this selection.").foregroundStyle(.secondary) }
+                        ForEach(rows) { row in purchaseRow(row) }
+                    }
+                }
+            }.frame(maxHeight: .infinity)
+        }.frame(maxHeight: .infinity)
+    }
+
+    private func purchaseRow(_ row: SummaryPurchase) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            if let record = ledger.record(id: row.recordID) {
+                Button { editor = ledger.editor(for: record) } label: {
+                    HStack { Text(record.draft.payee); Spacer(); Text(row.net.decimalText).monospacedDigit() }
+                }.buttonStyle(.plain)
+                Text(row.date.iso8601 + " · " + categoryLabel(row.categoryID)).font(.caption).foregroundStyle(.secondary)
+                if !row.refundIDs.isEmpty {
+                    Text("Purchase " + record.draft.amount.decimalText + "; linked refunds deducted")
+                        .font(.caption2).foregroundStyle(.secondary)
+                    ForEach(row.refundIDs, id: \.self) { id in
+                        if let refund = ledger.record(id: id) {
+                            Button("Refund received " + refund.draft.date.iso8601) { editor = ledger.editor(for: refund) }.font(.caption2)
+                        }
+                    }
+                }
+            }
+            Divider()
         }
     }
 
-    private func categoryCard(_ data: SpendingCharts) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Where the money goes").font(.headline)
-            Chart(data.categories) { bucket in
-                BarMark(x: .value("Posted spending", Int(bucket.totals.posted.minorUnits)), y: .value("Category", bucket.label))
-                    .foregroundStyle(.blue.gradient)
-                    .accessibilityLabel(bucket.label).accessibilityValue(bucket.totals.posted.decimalText)
-            }
-            .chartXAxis { moneyAxis }
-            .chartYSelection(value: $selectedCategory)
-            .frame(height: max(200, CGFloat(data.categories.count) * 42))
-            .onChange(of: selectedCategory) { _, label in
-                drilldown = data.categories.first { $0.label == label }
-            }
-            ForEach(data.categories) { bucket in
-                Button { drilldown = bucket } label: { LabeledContent(bucket.label, value: bucket.totals.posted.decimalText) }
-            }
-        }.padding().background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
+    private func selectedPurchases(_ data: SummaryReport, context: SummaryContext) -> [SummaryPurchase] {
+        data.purchases.filter { row in
+            switch context { case .period(let id): row.periodID == id; case .category(let id): row.categoryID == id; case .unallocated: false }
+        }
     }
-
-    private func monthCard(_ data: SpendingCharts) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Spending over time").font(.headline)
-            Chart(data.months) { month in
-                BarMark(x: .value("Month", month.id), y: .value("Posted spending", Int(month.posted.minorUnits)))
-                    .foregroundStyle(.teal.gradient)
-                    .accessibilityLabel(month.id).accessibilityValue(month.posted.decimalText)
-            }
-            .chartYAxis { moneyAxis }
-            .chartXSelection(value: $selectedMonth)
-            .frame(height: 260)
-            .onChange(of: selectedMonth) { _, id in
-                if let month = data.months.first(where: { $0.id == id }) { showMonth(month) }
-            }
-            Text("Tap a bar to see its transactions. Only observed months are shown.").font(.caption).foregroundStyle(.secondary)
-        }.padding().background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
+    private func contextTitle(_ data: SummaryReport) -> String {
+        switch selection {
+        case .period(let id): periodLabel(id, interval: data.interval)
+        case .category(let id): categoryLabel(id)
+        case .unallocated: "Refunds needing purchase links"
+        case nil: "Purchases · select a bar or slice"
+        }
     }
-
-    private func seasonalCard(_ data: SpendingCharts) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Time of year · compare years").font(.headline)
-            if data.years.count < 2 {
-                Text("One year is available so far. Additional years appear here when they are imported.").font(.caption).foregroundStyle(.secondary)
-            }
-            Chart(data.months) { month in
-                LineMark(x: .value("Month", month.month), y: .value("Posted spending", Int(month.posted.minorUnits)),
-                         series: .value("Observed segment", month.segment))
-                    .foregroundStyle(by: .value("Year", String(month.year)))
-                PointMark(x: .value("Month", month.month), y: .value("Posted spending", Int(month.posted.minorUnits)))
-                    .foregroundStyle(by: .value("Year", String(month.year)))
-                    .accessibilityLabel("\(month.year)-\(month.month)").accessibilityValue(month.posted.decimalText)
-            }
-            .chartXScale(domain: 1...12)
-            .chartXAxis {
-                AxisMarks(values: Array(1...12)) { value in
-                    AxisGridLine()
-                    AxisValueLabel {
-                        if let month = value.as(Int.self), (1...12).contains(month) { Text(Self.monthNames[month - 1]) }
-                    }
-                }
-            }
-            .chartYAxis { moneyAxis }
-            .chartXSelection(value: $seasonalMonth)
-            .frame(height: 260)
-            if let seasonalMonth, (1...12).contains(seasonalMonth) {
-                let matching = data.months.filter { $0.month == seasonalMonth }
-                ForEach(matching) { month in
-                    Button { showMonth(month) } label: {
-                        LabeledContent("\(Self.monthNames[seasonalMonth - 1]) \(month.year)", value: month.posted.decimalText)
-                    }
-                }
-            }
-            Text("Partial years and missing months are not equivalent coverage. Gaps are left open; no missing month is treated as zero.")
-                .font(.caption).foregroundStyle(.secondary)
-        }.padding().background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
+    private func categoryLabel(_ id: String) -> String { ledger.catalog.category(id: id)?.label ?? (id.isEmpty ? "No category" : id) }
+    private func periodLabel(_ id: String, interval: SummaryInterval) -> String { interval == .week ? "Week of " + id : id }
+    private func isSelected(period: String) -> Bool { if case .period(let id)? = selection { return id == period }; return true }
+    private func isSelected(category: String) -> Bool { if case .category(let id)? = selection { return id == category }; return true }
+    private func resetTemporaryFilters() { excludedCategories = []; selection = nil }
+    private func categoryColor(_ id: String) -> Color {
+        let palette: [Color] = [.blue, .orange, .teal, .purple, .pink, .indigo, .green, .brown, .cyan, .red, .mint]
+        let known = ledger.catalog.categories.map(\.id).sorted()
+        if let index = known.firstIndex(of: id), index < palette.count { return palette[index] }
+        if id.isEmpty { return .gray }
+        // Stable across launches; never use Swift's randomly seeded Hasher.
+        let value = id.utf8.reduce(UInt64(5381)) { ($0 &* 33) &+ UInt64($1) }
+        return palette[Int(value % UInt64(palette.count))]
     }
-
-    private var filters: some View {
-        DisclosureGroup("Spending filters") {
-            VStack(alignment: .leading, spacing: 12) {
-                Toggle("Exclude Exceptional Events", isOn: $excludeEvents)
-                ForEach(ledger.catalog.categories, id: \.id) { category in
-                    Toggle("Exclude " + category.label, isOn: Binding(get: { excludedCategories.contains(category.id) },
-                        set: { if $0 { excludedCategories.insert(category.id) } else { excludedCategories.remove(category.id) } }))
-                }
-                ForEach(Array(Set(ledger.records.flatMap { $0.draft.tags })).sorted(), id: \.self) { tag in
-                    Toggle("Exclude tag: " + tag, isOn: Binding(get: { excludedTags.contains(tag) },
-                        set: { if $0 { excludedTags.insert(tag) } else { excludedTags.remove(tag) } }))
-                }
-                Button("Clear Filters") { excludedTags = []; excludedCategories = []; excludeEvents = false }
-            }.padding(.top)
-        }.padding().background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
-    }
-
     private var moneyAxis: some AxisContent {
         AxisMarks { value in
             AxisGridLine()
-            AxisValueLabel {
-                if let cents = value.as(Int.self) { Text(Money(minorUnits: Int64(cents)).decimalText) }
-            }
+            AxisValueLabel { if let cents = value.as(Int.self) { Text(Money(minorUnits: Int64(cents)).decimalText) } }
         }
     }
-    private func showMonth(_ month: SpendingMonth) {
-        let ids = Set(month.recordIDs)
-        guard let totals = try? SpendingTotals(records: records.filter({ ids.contains($0.id) })) else { return }
-        drilldown = SpendingBucket(id: month.id, label: month.id, recordIDs: month.recordIDs,
-            totals: totals)
+}
+
+@MainActor
+struct VisibilityView: View {
+    @Bindable var ledger: LedgerViewModel
+    @State private var search = ""
+    private var settings: SummaryVisibility { ledger.workspace.summaryVisibility ?? .init() }
+    private var categoryIDs: [String] {
+        Set(ledger.catalog.categories.map(\.id)).union(ledger.records.map { $0.draft.categoryID ?? "" }).union(settings.categoryIDs).sorted()
     }
-    private static let monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    private var tags: [String] { Set(ledger.records.flatMap { $0.draft.tags }).union(settings.tags).sorted() }
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    Text("Hide from Overview only. Transactions, discussions, and ChatGPT packets keep all records. A category or tag rule also hides future matching transactions. These settings save immediately and are included in backups.")
+                        .font(.callout).foregroundStyle(.secondary)
+                }
+                Section("Hide categories") {
+                    ForEach(categoryIDs, id: \.self) { id in
+                        Toggle(ledger.catalog.category(id: id)?.label ?? (id.isEmpty ? "No category" : id), isOn: categoryBinding(id))
+                    }
+                }
+                Section("Hide tags") {
+                    if tags.isEmpty { Text("No tags yet").foregroundStyle(.secondary) }
+                    ForEach(tags, id: \.self) { tag in Toggle(tag, isOn: tagBinding(tag)) }
+                }
+                Section("Hide individual transactions") {
+                    ForEach(ledger.records.filter { search.isEmpty || $0.draft.payee.localizedCaseInsensitiveContains(search)
+                        || $0.draft.date.iso8601.contains(search) }) { record in
+                        Toggle(isOn: recordBinding(record.id)) {
+                            VStack(alignment: .leading) {
+                                Text(record.draft.payee)
+                                Text(record.draft.date.iso8601 + " · " + record.draft.amount.decimalText).font(.caption).foregroundStyle(.secondary)
+                                if settings.hides(record), !settings.recordIDs.contains(record.id) {
+                                    Text("Hidden by a category or tag rule").font(.caption).foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .searchable(text: $search, prompt: "Find individual transactions")
+            .navigationBarTitleDisplayMode(.inline)
+        }
+    }
+    private func categoryBinding(_ id: String) -> Binding<Bool> {
+        Binding(get: { settings.categoryIDs.contains(id) }, set: { hidden in
+            var copy = settings; if hidden { copy.categoryIDs.insert(id) } else { copy.categoryIDs.remove(id) }
+            ledger.saveSummaryVisibility(copy)
+        })
+    }
+    private func tagBinding(_ tag: String) -> Binding<Bool> {
+        Binding(get: { settings.tags.contains(tag) }, set: { hidden in
+            var copy = settings; if hidden { copy.tags.insert(tag) } else { copy.tags.remove(tag) }
+            ledger.saveSummaryVisibility(copy)
+        })
+    }
+    private func recordBinding(_ id: UUID) -> Binding<Bool> {
+        Binding(get: { settings.recordIDs.contains(id) }, set: { hidden in
+            var copy = settings; if hidden { copy.recordIDs.insert(id) } else { copy.recordIDs.remove(id) }
+            ledger.saveSummaryVisibility(copy)
+        })
+    }
 }
