@@ -94,6 +94,12 @@ public struct SummaryBar: Identifiable, Sendable {
     public let amount: Money
 }
 
+public struct SummaryPeriod: Identifiable, Sendable {
+    public let id: String
+    public let axisLabel: String
+    public let label: String
+}
+
 /// Purchase-date accounting, independent of UI coordinates. Refunds received
 /// outside the selected date range still reduce their linked original purchases.
 /// Unlinked refunds never become guessed negative pie slices or current spending.
@@ -102,6 +108,8 @@ public struct SummaryReport: Sendable {
     public let purchases: [SummaryPurchase]
     public let categories: [SummaryCategory]
     public let bars: [SummaryBar]
+    /// Includes empty periods. Absence of purchases is not proof of bank coverage.
+    public let periods: [SummaryPeriod]
     public let pending: Money
     public let total: Money
     public let unallocatedRefundIDs: [UUID]
@@ -151,6 +159,27 @@ public struct SummaryReport: Sendable {
         func inRange(_ value: TransactionDate) -> Bool {
             (from.map { value >= $0 } ?? true) && (through.map { value <= $0 } ?? true)
         }
+        var timeline: [SummaryPeriod] = []
+        if let first, let last, first <= last {
+            let initial = try period(first)
+            let padded = chosen == .year ? initial + "-01-01" : chosen == .month ? initial + "-01" : initial
+            var cursor = try date(TransactionDate(padded))
+            let end = try date(last)
+            let component: Calendar.Component = chosen == .week ? .day : chosen == .month ? .month : .year
+            let step = chosen == .week ? 7 : 1
+            while cursor <= end {
+                let parts = calendar.dateComponents([.year, .month, .day], from: cursor)
+                let day = try TransactionDate(String(format: "%04d-%02d-%02d", parts.year!, parts.month!, parts.day!))
+                let id = try period(day)
+                let axis = chosen == .week ? (timeline.isEmpty ? String(id.suffix(5)) : "wk \(timeline.count + 1)") : id
+                timeline.append(SummaryPeriod(id: id, axisLabel: axis, label: chosen == .week ? "Week of " + id : id))
+                guard timeline.count <= 10_000, let next = calendar.date(byAdding: component, value: step, to: cursor), next > cursor else {
+                    throw ExchangeError.invalid("Unable to build the selected summary timeline.")
+                }
+                cursor = next
+            }
+        }
+        periods = timeline
         func add(_ a: Int64, _ b: Int64) throws -> Int64 {
             let (result, overflow) = a.addingReportingOverflow(b)
             guard !overflow else { throw ExchangeError.invalid("Summary exceeds the supported amount range.") }

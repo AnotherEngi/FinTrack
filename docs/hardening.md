@@ -1,5 +1,12 @@
 # Exchange and backup hardening pass
 
+Latest batch: [clipboard/summary/private trial](real-data-trial.md). All 119
+portable tests passed; 19 native files parsed. Reviewed strict migration fields,
+source row/column/total controls, explicit approval evidence, source-ID ambiguity,
+metadata archive framing, taxonomy rollback/legacy restore, and preservation of
+the previous store. Four native regression cases await Mac. No actual private
+financial data or financial connections were accessed.
+
 Mac regression follow-up: corrected two stale fixture/retention expectations and
 replaced recovery's Foundation pointer replacement with an atomic Darwin swap.
 The damaged pointer remains preserved with its original bytes/permissions; there

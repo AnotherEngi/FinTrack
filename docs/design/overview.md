@@ -1,6 +1,7 @@
 # Overview, visibility, and purchase-date refunds
 
 User decisions, 2026-10-25. This supersedes the earlier three-chart Overview.
+Latest refinements and current verification: [private trial guide](../real-data-trial.md).
 Implemented in source. The lifecycle follow-up passed all 108 portable tests on
 Windows and parsed all 18 Apple source/test files. Mac/iPad execution remains
 pending. The user now asks the agent to run all available local checks and supply
@@ -10,6 +11,8 @@ remote-writing Git commands automatically. No new commit or push was performed.
 
 Landscape iPad is the target, with keyboard/trackpad and touch equally supported.
 Two charts sit side by side, with independently scrolling panels below them:
+Each chart and each lower panel has its own separate card/background; the legend
+and purchases must not share a card with their graph.
 
 | Left | Right |
 | --- | --- |
@@ -26,7 +29,10 @@ Its net amount is displayed along with links to any applied refunds.
 Automatic grouping uses Monday-based calendar weeks for spans up to 93 days,
 months up to 1,096 days, and years for longer spans. Presets/custom dates determine
 the span; All history uses the full saved purchase span, independent of filters.
-Only observed periods are drawn; missing history does not mean zero spending.
+Every period intersecting the selected range is retained on the timeline, even
+without purchases. Empty periods do not establish verified zero spending or source
+coverage. Weekly labels use the first date then wk 2, wk 3, etc.; full dates remain
+available for selection. Rolling bounds can include partial calendar periods.
 The same category colors are used in both charts and the legend. Totals are exact
 integer minor units; floating point is confined to native chart/pointer geometry.
 Pending charges are shown separately and do not enter posted-spending charts.
@@ -44,6 +50,9 @@ IDs (including No category), or exact tags. Rules combine with OR: any matching
 rule hides the record from Overview. Category/tag rules also cover future matches.
 Turning off an individual switch does not override an active category/tag rule;
 the row explains when another rule still hides it.
+The tab shows hidden items only. Searchable add pickers expose the complete
+category/tag lists. Set individual visibility in the transaction editor; the tab
+provides access to hidden records and removal of existing rules.
 
 Visibility is optional app-owned `ReviewWorkspace.summaryVisibility` metadata,
 persisted in the existing SwiftData V3 workspace payload. Saving it changes the

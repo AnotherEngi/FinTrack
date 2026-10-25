@@ -1,6 +1,12 @@
 # Development and verification
 
-Latest source batch: [lifecycle safety/retention verification](lifecycle-validation.md).
+Latest clipboard/summary/history batch: [trial and verification guide](real-data-trial.md).
+**119 portable tests passed** on Windows Swift 6.4.1; **19** Apple files passed
+syntax parsing. Four new native regressions and the new UI/import/clipboard flows
+require Mac/iPad execution. The user reports prior Mac and iCloud restore checks
+passed; that is a separate earlier-revision result. Commands are in the new guide.
+
+Earlier lifecycle batch: [lifecycle safety/retention verification](lifecycle-validation.md).
 All 108 portable tests passed on Windows Swift 6.4.1; all 18 Apple source/test
 files passed syntax parsing. Use that guide for results and remaining Mac/iPad
 checks; earlier passed counts below are historical. No commit/push was performed.

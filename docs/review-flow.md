@@ -1,5 +1,9 @@
 # Discussions, review files, and spending views
 
+Current transport: preparing a review copies it to the local clipboard by default;
+Import reply has Paste plus file fallback. Dedicated audited history migration
+and weekly intake are distinct. See [the trial guide](real-data-trial.md).
+
 Latest retention decision: Approve or Mark Resolved closes the current discussion.
 Completed imports become compact receipts; open answers live separately until
 closure, and unsent feedback/drafts are preserved. Native backup export now writes

@@ -89,25 +89,29 @@ struct OverviewView: View {
                         Text("Spending by " + data.interval.rawValue).font(.headline)
                         Spacer()
                         Menu("Select period") {
-                            ForEach(Array(Set(data.bars.map(\.periodID))).sorted(), id: \.self) { period in
-                                Button(periodLabel(period, interval: data.interval)) { selection = .period(period) }
+                            ForEach(data.periods) { period in
+                                Button(period.label) { selection = .period(period.id) }
                             }
                         }.font(.caption)
                     }
                     barChart(data).frame(height: chartHeight(height))
-                    Divider()
-                    categoryLegend(legend)
                 }
-                .padding(12).frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(12).frame(maxWidth: .infinity)
                 .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14))
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Categories · full selected range").font(.headline)
                     pieChart(data).frame(height: chartHeight(height))
-                    Divider()
-                    purchasesPanel(data)
                 }
-                .padding(12).frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(12).frame(maxWidth: .infinity)
                 .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14))
+            }
+            HStack(alignment: .top, spacing: 14) {
+                categoryLegend(legend)
+                    .padding(12).frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14))
+                purchasesPanel(data)
+                    .padding(12).frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14))
             }.frame(maxHeight: .infinity)
             Text("Linked refunds reduce original purchase dates. Unlinked refunds need allocation. Missing history is unknown.")
                 .font(.caption2).foregroundStyle(.secondary)
@@ -125,12 +129,15 @@ struct OverviewView: View {
                 .accessibilityValue(bar.amount.decimalText)
         }
         .chartLegend(.hidden)
+        .chartXScale(domain: data.periods.map(\.id))
         .chartForegroundStyleScale(domain: data.categories.map(\.id), range: data.categories.map { categoryColor($0.id) })
         .chartYAxis { moneyAxis }
         .chartXAxis {
-            AxisMarks { value in
+            AxisMarks(values: data.periods.map(\.id)) { value in
                 AxisValueLabel {
-                    if let period = value.as(String.self) { Text(periodLabel(period, interval: data.interval)).font(.caption2) }
+                    if let period = value.as(String.self), let entry = data.periods.first(where: { $0.id == period }) {
+                        Text(entry.axisLabel).font(.caption2).lineLimit(1)
+                    }
                 }
             }
         }
@@ -298,6 +305,10 @@ struct OverviewView: View {
 struct VisibilityView: View {
     @Bindable var ledger: LedgerViewModel
     @State private var search = ""
+    @State private var picker: RuleKind?
+    @State private var ruleSearch = ""
+    @State private var editor: EditorDraft?
+    private enum RuleKind: String, Identifiable { case category, tag; var id: Self { self } }
     private var settings: SummaryVisibility { ledger.workspace.summaryVisibility ?? .init() }
     private var categoryIDs: [String] {
         Set(ledger.catalog.categories.map(\.id)).union(ledger.records.map { $0.draft.categoryID ?? "" }).union(settings.categoryIDs).sorted()
@@ -310,19 +321,29 @@ struct VisibilityView: View {
                     Text("Hide from Overview only. Transactions, discussions, and ChatGPT packets keep all records. A category or tag rule also hides future matching transactions. These settings save immediately and are included in backups.")
                         .font(.callout).foregroundStyle(.secondary)
                 }
-                Section("Hide categories") {
-                    ForEach(categoryIDs, id: \.self) { id in
-                        Toggle(ledger.catalog.category(id: id)?.label ?? (id.isEmpty ? "No category" : id), isOn: categoryBinding(id))
+                Section("Hidden categories") {
+                    ForEach(settings.categoryIDs.sorted(), id: \.self) { id in
+                        HStack {
+                            Text(categoryLabel(id)); Spacer()
+                            Button("Show") { categoryBinding(id).wrappedValue = false }
+                                .accessibilityLabel("Show category " + categoryLabel(id))
+                        }
                     }
+                    Button("Add Category", systemImage: "plus") { ruleSearch = ""; picker = .category }
                 }
-                Section("Hide tags") {
-                    if tags.isEmpty { Text("No tags yet").foregroundStyle(.secondary) }
-                    ForEach(tags, id: \.self) { tag in Toggle(tag, isOn: tagBinding(tag)) }
+                Section("Hidden tags") {
+                    ForEach(settings.tags.sorted(), id: \.self) { tag in
+                        HStack { Text(tag); Spacer(); Button("Show") { tagBinding(tag).wrappedValue = false }.accessibilityLabel("Show tag " + tag) }
+                    }
+                    Button("Add Tag", systemImage: "plus") { ruleSearch = ""; picker = .tag }
                 }
-                Section("Hide individual transactions") {
-                    ForEach(ledger.records.filter { search.isEmpty || $0.draft.payee.localizedCaseInsensitiveContains(search)
-                        || $0.draft.date.iso8601.contains(search) }) { record in
-                        Toggle(isOn: recordBinding(record.id)) {
+                Section("Hidden transactions") {
+                    Text("Hide an individual transaction in its editor. Category and tag rules also hide matching transactions.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    ForEach(ledger.records.filter { settings.hides($0) && (search.isEmpty || $0.draft.payee.localizedCaseInsensitiveContains(search)
+                        || $0.draft.date.iso8601.contains(search)) }) { record in
+                        HStack {
+                        Button { editor = ledger.editor(for: record) } label: {
                             VStack(alignment: .leading) {
                                 Text(record.draft.payee)
                                 Text(record.draft.date.iso8601 + " · " + record.draft.amount.decimalText).font(.caption).foregroundStyle(.secondary)
@@ -330,14 +351,42 @@ struct VisibilityView: View {
                                     Text("Hidden by a category or tag rule").font(.caption).foregroundStyle(.secondary)
                                 }
                             }
+                        }.buttonStyle(.plain)
+                        Spacer()
+                        if settings.recordIDs.contains(record.id) {
+                            Button("Show") { recordBinding(record.id).wrappedValue = false }
+                                .accessibilityLabel("Remove individual hiding for " + record.draft.payee)
+                        }
                         }
                     }
                 }
             }
-            .searchable(text: $search, prompt: "Find individual transactions")
+            .searchable(text: $search, prompt: "Find hidden transactions")
             .navigationBarTitleDisplayMode(.inline)
+            .sheet(item: $editor) { draft in TransactionEditorView(ledger: ledger, draft: draft) { _ in }.id(draft.id) }
+            .sheet(item: $picker) { kind in
+                NavigationStack {
+                    List {
+                        ForEach((kind == .category ? categoryIDs : tags).filter {
+                            ruleSearch.isEmpty || (kind == .category ? categoryLabel($0) : $0).localizedCaseInsensitiveContains(ruleSearch)
+                        }, id: \.self) { value in
+                            let hidden = kind == .category ? settings.categoryIDs.contains(value) : settings.tags.contains(value)
+                            Button {
+                                if kind == .category { categoryBinding(value).wrappedValue = true }
+                                else { tagBinding(value).wrappedValue = true }
+                            } label: {
+                                HStack { Text(kind == .category ? categoryLabel(value) : value); Spacer(); if hidden { Image(systemName: "checkmark") } }
+                            }.disabled(hidden)
+                        }
+                    }
+                    .navigationTitle(kind == .category ? "Hide Categories" : "Hide Tags")
+                    .searchable(text: $ruleSearch)
+                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { picker = nil } } }
+                }
+            }
         }
     }
+    private func categoryLabel(_ id: String) -> String { ledger.catalog.category(id: id)?.label ?? (id.isEmpty ? "No category" : id) }
     private func categoryBinding(_ id: String) -> Binding<Bool> {
         Binding(get: { settings.categoryIDs.contains(id) }, set: { hidden in
             var copy = settings; if hidden { copy.categoryIDs.insert(id) } else { copy.categoryIDs.remove(id) }

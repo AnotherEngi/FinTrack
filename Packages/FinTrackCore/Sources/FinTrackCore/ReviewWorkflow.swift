@@ -141,9 +141,10 @@ public struct ReviewEnvelope: Codable, Sendable {
     public let snapshot: ReviewPacket?
     public let returnTemplate: ReviewResponse
     public let discussionContext: [DiscussionThread]?
+    public var historyContext: [String: [String: String]]? = nil
 
     private enum CodingKeys: String, CodingKey {
-        case schemaVersion, purpose, instructions, manifest, feedback, knowledge, snapshot, returnTemplate, discussionContext
+        case schemaVersion, purpose, instructions, manifest, feedback, knowledge, snapshot, returnTemplate, discussionContext, historyContext
     }
     public func encode(to encoder: any Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
@@ -153,6 +154,7 @@ public struct ReviewEnvelope: Codable, Sendable {
         try c.encodeIfPresent(snapshot, forKey: .snapshot)
         try c.encode(ResponseTemplate(value: returnTemplate), forKey: .returnTemplate)
         try c.encodeIfPresent(discussionContext, forKey: .discussionContext)
+        try c.encodeIfPresent(historyContext, forKey: .historyContext)
     }
 }
 
@@ -342,6 +344,9 @@ public struct ReviewWorkspace: Codable, Sendable {
     public var retiredPacketIDs: Set<UUID>?
     public var discussionAnswers: [DiscussionAnswer]?
     public var discussionClosedRevisions: [String: String]?
+    public var importedCategories: [ReviewCategory]?
+    public var historyImport: HistoryImportReceipt?
+    public var historyDetails: [String: [String: String]]?
     public init() {}
 
     public mutating func recordUserChange(before: LedgerTransaction?, after: LedgerTransaction, kind: String = "user-edit") {
@@ -401,7 +406,8 @@ public struct ReviewWorkspace: Codable, Sendable {
         let envelope = ReviewEnvelope(schemaVersion: 1, purpose: "fintrack-review-request",
             instructions: Self.instructions, manifest: manifest, feedback: pending,
             knowledge: knowledge, snapshot: export?.packet, returnTemplate: template,
-            discussionContext: threads.filter { thread in selected.contains { $0.id == thread.recordID } })
+            discussionContext: threads.filter { thread in selected.contains { $0.id == thread.recordID } },
+            historyContext: historyDetails.map { details in details.filter { manifest.recordRevisions[$0.key] != nil } })
         _ = try ExchangeJSON.encode(envelope)
         manifests.append(manifest)
         return envelope
@@ -554,7 +560,10 @@ public struct ReviewWorkspace: Codable, Sendable {
     current record context. Full-history mode includes every accepted record at preparation time;
     source coverage can still be incomplete. State any analysis/file limitations; never claim to
     have examined omitted data. Do not infer approval or repayment.
-    Return ONE JSON file matching returnTemplate. Keep packetID and knowledgeVersion exactly.
+    Return ONE JSON object matching returnTemplate, preferably as copyable message text.
+    Large responses may use a JSON file. Keep packetID and knowledgeVersion exactly.
+    historyContext preserves unmapped source details, not additional booked transactions.
+    Do not double-count preserved splits/reimbursements or infer repayment from them.
     Generate a new response id. Acknowledge only operation IDs actually processed, from manifest.
     Put discussion replies in an answers array: each answer has id UUID, recordID,
     expectedRevision string from manifest, text, optional questionForUser. Reading an answer
@@ -630,6 +639,7 @@ public struct FullBackup: Codable, Sendable {
         createdAt = at; self.records = records; self.workspace = workspace
     }
     public func validate(catalog: ReviewCatalog) throws {
+        let catalog = try workspace.effectiveCatalog(fallback: catalog)
         guard schemaVersion == 1, purpose == "fintrack-full-backup",
               amountSignConvention == Money.amountSignConvention,
               records.count <= BackupCapacity.maximumRecords, Set(records.map(\.id)).count == records.count,
@@ -643,6 +653,7 @@ public struct FullBackup: Codable, Sendable {
             throw ExchangeError.invalid("The backup is invalid or has an unsupported version/convention.")
         }
         let ids = Set(records.map(\.id))
+        try workspace.validateHistory(recordIDs: ids)
         var recordBytes = 0
         for record in records {
             let size = try JSONEncoder().encode(record).count

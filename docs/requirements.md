@@ -1,6 +1,12 @@
 # FinTrack requirements and implementation plan
 
-Latest lifecycle batch: see [implemented safety changes and verification](lifecycle-validation.md)
+Latest batch: [clipboard/summary/private trial](real-data-trial.md), including the
+[ChatGPT Sheet migration instructions](chatgpt-history-migration.md). The user
+reports previous Mac tests and iCloud backup/download/restore passed. This batch
+adds a dedicated audited initial import, persisted actual categories and preserved
+unsupported source details; its new native/device checks must run separately.
+
+Earlier lifecycle batch: see [implemented safety changes and verification](lifecycle-validation.md)
 and [data retention](data-retention.md). Approval closes the current discussion;
 raw responses are temporary, completed imports retain compact fingerprints, and
 unsent feedback survives closure. Independent startup recovery and versioned

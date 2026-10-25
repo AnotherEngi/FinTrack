@@ -1,9 +1,10 @@
 # FinTrack data inventory and retention
 
 Updated 2026-10-25. This describes the current source after the lifecycle fixes,
-not a claim of successful Mac/iPad execution. All 108 portable tests passed on
-Windows; 18 Apple files passed syntax parsing. Native tests and device/cloud
-verification remain pending; see [validation](lifecycle-validation.md).
+not a claim of successful execution of the new Mac/iPad flows. All 119 portable
+tests passed on Windows; 19 Apple files passed syntax parsing. The user reports
+earlier native/iCloud checks passed; the clipboard/history batch needs its own
+validation. See [the current trial guide](real-data-trial.md).
 Only synthetic development data was used. No commit/push was performed.
 
 FinTrack owns the accepted financial ledger. ChatGPT supplies temporary analysis;
@@ -34,6 +35,9 @@ progress, and retired database files are not embedded in those archives.
 | --- | --- | --- | --- |
 | Transaction IDs, dates, merchant, exact amount/currency, posting/treatment, optional activity date | Transaction SwiftData row and domain payload; full backups | Authoritative financial history | No automatic expiry. Edits replace current values. Full restore can replace the ledger. Individual transaction deletion is not implemented. |
 | Current category and tags, exceptional-event flag | Transaction payload; full backups | Classification and reporting | No automatic expiry; kept until edited or replaced by restore. Tags remain even when their discussion is removed. |
+| Imported actual category catalog | Workspace `importedCategories`; full backups | Keep real category IDs/labels and flags consistent across restart, editing, weekly intake and ChatGPT | No automatic expiry; retained with the ledger and restored with it. Synthetic defaults apply only before migration. |
+| Initial history migration audit/receipt | Workspace `historyImport`; full backups | Source alias, import ID/fingerprint, original record IDs, declared source row/column accounting, exclusions, warnings, control total and import time | No automatic expiry. It is source provenance, not a retained ChatGPT conversation. It records exporter assertions, not independent proof of source completeness. |
+| Preserved unsupported Sheet details and prior approval evidence | Workspace `historyDetails` keyed by record UUID; full backups | Avoid losing source subcategory/split/reimbursement details; read-only editor inspection and corresponding ChatGPT review context | Retained with the financial record until replaced by full restore. They do not drive native accounting. Mapped transient assistant questions/reasons are not duplicated here. |
 | Source alias UUID/label and genuine provider transaction identity mappings | Transaction source plus workspace source links; full backups | Identify the source and prevent duplicate intake | Retained with the financial record. Labels are not credentials. Stable provider/account identity independent of labels is still a contract gap. |
 | Original and latest accepted source facts | Workspace source links; full backups | Preserve source evidence independently of manual annotations and compare updates | Both retained indefinitely with the record. Intermediate full source versions are not kept. |
 | Superseded source fingerprints and pending-to-posted successor identity | Source links; full backups | Reject known older facts and prevent superseded pending IDs from regressing a posted record | Compact fingerprints/identity relationships retained indefinitely. Unknown older facts cannot be ordered reliably by weekly v1. |
@@ -52,8 +56,8 @@ progress, and retired database files are not embedded in those archives.
 | Accepted classification guidance | Workspace current rules with IDs/text/origin and version; full backups | Recover learned rules and include them in reviews | Current accepted rules retained until edited/deleted. This batch does not add permanent rule-text version history. Limit: 1,000 current rules, enforced for manual and assistant additions alike. |
 | Visibility rules by transaction/category/tag | Workspace preferences; full backups | Persistently hide records from Overview only | Until the user changes them or restores another backup. They do not filter financial exports or ChatGPT packets. |
 
-The current taxonomy is still five synthetic categories defined in source. A
-persisted real taxonomy/subcategories, general spending splits, and reimbursement
+The prototype starts with five synthetic categories; a history import now installs
+the actual category catalog. Structured subcategories, general spending splits, and reimbursement
 relationships are **not implemented**; do not mistake refund allocations for
 those features. No bank passwords, OAuth tokens, or LLM API credentials are
 stored by this app.
@@ -62,6 +66,8 @@ stored by this app.
 
 | Data | Storage | Purpose | Retention / removal |
 | --- | --- | --- | --- |
+| Clipboard review text | iPad pasteboard; explicit copy only | Paste a prepared review into ChatGPT without a Files upload | App copies expire after one hour and are marked local-only. User-created ChatGPT copies have their own external retention. Clipboard limits never truncate a packet. |
+| Pasted reply / initial history preview | View memory, then the existing validated staging/migration path when accepted | Explicit clipboard transport with normal validation and review | No separate clipboard log. Unconfirmed history stays in memory; accepted history retains typed records/audit/details, not the entire raw migration file. Staged reply retention follows the rows below. |
 | Imported ChatGPT response JSON | Canonical bytes in workspace staged files; full backups while pending | Validate provenance and show undecided proposals | Removed as soon as acknowledgement is recorded and all actual classification/guidance proposals are handled. Open answers are extracted first. Approval settles older classification proposals; it does not accept guidance. A shared raw file may still contain closed text while another item in that file remains undecided; Dismiss Remaining Items explicitly finishes it. |
 | Imported weekly JSON | Workspace staged files; full backups while pending | Review/add/reconcile incoming source facts | Removed once every row's facts are incorporated, or the user explicitly dismisses remaining rows. Unfinished files are not deleted by age. |
 | Compact import receipts | Workspace; full backups | Reject changed-content file-ID reuse, repeated operations and reused item IDs after raw deletion | IDs/fingerprints kept indefinitely. Contains file ID, purpose, SHA-256 fingerprint, processing time/disposition, packet/item/decision IDs, and optional row count/reported weekly coverage. No full response or financial row copies. |
@@ -135,7 +141,7 @@ even after raw responses are compacted; logical archive size reflects live data.
 Still required: Mac native tests and Xcode build, device corruption and
 interruption tests, actual cloud download → empty-store restore, and iPad memory/
 latency measurements above 50 MiB. Stable collector/account keys, unknown-source
-freshness, structured coverage, real taxonomy/splits/reimbursements, legacy
-migration, indexed workspace entities, bounded full-history review jobs, and
+freshness, structured coverage, live subcategories/splits/reimbursements, full
+legacy behavioral parity, indexed workspace entities, bounded full-history review jobs, and
 guidance revision history remain future work. No cloud sync, automatic ChatGPT
 transport, account access, or billed API is added by this batch.

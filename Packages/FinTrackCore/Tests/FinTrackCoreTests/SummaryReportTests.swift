@@ -10,6 +10,27 @@ private func summaryRecord(_ date: String, _ cents: Int64, category: String = "s
         tags: tags, refundAllocations: links))
 }
 
+@Test func summaryTimelineKeepsAllSixCalendarMonthsIncludingEmptyMonthsAndHiddenPurchases() throws {
+    let a = try summaryRecord("2026-05-02", 100)
+    let b = try summaryRecord("2026-10-02", 200)
+    let report = try SummaryReport(records: [a, b], catalog: .prototype,
+        from: TransactionDate("2026-05-01"), through: TransactionDate("2026-10-25"))
+    #expect(report.periods.map(\.id) == ["2026-05", "2026-06", "2026-07", "2026-08", "2026-09", "2026-10"])
+    #expect(report.bars.count == 2 && report.total.minorUnits == 300)
+    let hidden = try SummaryReport(records: [a, b], catalog: .prototype,
+        from: TransactionDate("2026-05-01"), through: TransactionDate("2026-10-25"), visibility: .init(recordIDs: [a.id, b.id]))
+    #expect(hidden.periods.map(\.id) == report.periods.map(\.id) && hidden.bars.isEmpty)
+}
+
+@Test func weeklyTimelineUsesFirstDateAndCompactWeekLabelsWithoutSkippingEmptyWeeks() throws {
+    let record = try summaryRecord("2026-01-01", 100)
+    let report = try SummaryReport(records: [record], catalog: .prototype,
+        from: TransactionDate("2025-12-29"), through: TransactionDate("2026-01-18"))
+    #expect(report.periods.map(\.id) == ["2025-12-29", "2026-01-05", "2026-01-12"])
+    #expect(report.periods.map(\.axisLabel) == ["12-29", "wk 2", "wk 3"])
+    #expect(report.periods.first?.label == "Week of 2025-12-29")
+}
+
 @Test func delayedRefundReducesOriginalMarchPurchaseEvenWhenJuneIsOutsideSelectedDates() throws {
     let purchase = try summaryRecord("2026-03-01", 10000)
     let refund = try summaryRecord("2026-06-12", -2500, category: "sample-transit", treatment: .refund,

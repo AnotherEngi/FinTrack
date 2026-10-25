@@ -133,14 +133,36 @@ which checks actually ran here and which require the Mac or physical iPad.
 
 ### Implementation state
 
-- Latest Mac test report: the user ran 41 persistence tests; three tests failed
+- Latest requested batch: four distinct Overview cards, complete timeline periods
+  including empty buckets, compact weekly labels, hidden-only Visibility lists
+  with add pickers, individual hiding in the editor, and clipboard-first review
+  exchange. Keep file fallback; 256 KiB clipboard, 50 MiB file exchange. Explicit
+  Paste only; app copies are device-local with one-hour expiration. Copy is not
+  receipt/approval. See docs/real-data-trial.md for current results and commands.
+  All 119 portable tests passed on Windows Swift 6.4.1; all 19 native app/package
+  source/test files passed syntax parsing. Four new native tests plus the app/UI
+  build and device behavior still require Mac/iPad validation for this revision.
+- The user reports the previous Mac tests and an actual iCloud backup/download/
+  restore passed. This new batch needs its own Mac/device validation. The user
+  requests a private real-data trial; no actual financial data was supplied or
+  accessed. Provide docs/chatgpt-history-migration.md to their finance ChatGPT
+  workflow: full source audit, exact row/total controls, omitted-detail flags and
+  dedicated fintrack-history-import JSON. Initial import creates a separate store,
+  preserves the current one, and refuses a different second migration in the
+  established history ledger. Weekly additions use the existing intake protocol.
+- Imported actual categories are optional workspace metadata, loaded on reopen and
+  restored with backups. Preserve unsupported source details/approval evidence
+  read-only plus a compact migration audit; include relevant details in review
+  context. Those details do not implement live splits/subcategories/reimbursements.
+  Never infer prior user approval or invent bank IDs from Sheet row numbers.
+- Earlier Mac failure report (subsequently reported passing): the user ran 41 persistence tests; three tests failed
   with four issues. Source corrections separate the atomic-import save fixture
   from duplicate review, expect approval to clear resolved assistant text, and
   replace unreadable recovery pointers through a same-volume atomic Darwin swap.
   The original pointer is retained under PreviousStore-<UUID>.json; unsupported
   swaps fail without removing it. Native regression rerun and app build remain
   required. See docs/lifecycle-validation.md for the follow-up and actual checks.
-- Latest lifecycle/retention safety batch: all 108 portable tests passed on
+- Earlier lifecycle/retention safety batch: all 108 portable tests passed on
   Windows Swift 6.4.1 on 2026-10-25; all 18 Apple app/persistence source/test
   files passed syntax parsing. Native package tests, Apple typechecking/build,
   and iPad/cloud validation still require the Mac/device. No Git publication

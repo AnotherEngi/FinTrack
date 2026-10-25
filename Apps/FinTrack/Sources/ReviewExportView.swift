@@ -1,5 +1,6 @@
 import SwiftUI
 import UniformTypeIdentifiers
+import UIKit
 import FinTrackCore
 
 private let backupContentType = UTType(filenameExtension: "fintrack", conformingTo: .data) ?? .data
@@ -72,6 +73,8 @@ private struct TransferForm: View {
     @State private var deleteStoreID: String?
     @State private var confirmDeleteStore = false
     @State private var confirmCleanup = false
+    @State private var transferNotice: String?
+    @State private var historyCandidate: HistoryImport?
 
     var body: some View {
         NavigationStack {
@@ -80,8 +83,10 @@ private struct TransferForm: View {
                     reviewSection
                     if let preparedFile {
                     Section(preparedMode == .fullHistory ? "Prepared: Full history review" : "Prepared: Pending feedback and questions") {
-                        ShareLink(item: preparedFile) { Label("Share Prepared Review", systemImage: "square.and.arrow.up") }
-                        Text("Attach this one file in your finance ChatGPT conversation. Bring the response back using Import reply.")
+                        Button("Copy Review Again", systemImage: "doc.on.clipboard") { attempt { try copyReview(preparedFile) } }
+                        if let transferNotice { Text(transferNotice).font(.callout) }
+                        Text("Open ChatGPT and paste. Copy its JSON response text, then use Paste in Import reply.").font(.callout)
+                        ShareLink(item: preparedFile) { Label("Share JSON File Instead", systemImage: "square.and.arrow.up") }
                         if preparedGeneration != ledger.workspace.generation {
                             Text("You have newer saved changes. This file is the snapshot you prepared; start another review to include them.").foregroundStyle(.orange)
                         }
@@ -95,7 +100,16 @@ private struct TransferForm: View {
                 }
                 if page == .inbox {
                 Section("Incoming reviews and weekly transactions") {
+                    PasteButton(payloadType: String.self) { values in
+                        attempt {
+                            guard values.count == 1, let text = values.first else { throw ExchangeError.invalid("Paste one complete JSON response at a time.") }
+                            try importData(ClipboardExchange.incoming(text))
+                        }
+                    }
+                    Text("Copy the JSON message text in ChatGPT, then paste here. This uses the same validation and review as importing a file.").font(.caption).foregroundStyle(.secondary)
                     Button("Import ChatGPT Reply or Weekly File", systemImage: "square.and.arrow.down") { pick(.review) }
+                    Text("History migration JSON can also be pasted or imported here. You will review its audit before it creates a separate ledger.").font(.caption).foregroundStyle(.secondary)
+                    if let transferNotice { Text(transferNotice).font(.callout) }
                     ForEach(ledger.workspace.staged.reversed()) { file in
                         NavigationLink {
                             IncomingReviewView(ledger: ledger, fileID: file.id)
@@ -122,6 +136,13 @@ private struct TransferForm: View {
                         }
                     }
                 }
+                if let history = ledger.workspace.historyImport {
+                    Section("History migration audit") {
+                        Text(history.sourceName)
+                        Text("\(history.recordIDs.count) imported rows; \(history.audit.excludedRows.count) excluded source rows.")
+                        DisclosureGroup("Column mapping, omissions and warnings") { HistoryAuditView(audit: history.audit) }
+                    }
+                }
                 }
                 if page == .backup { backupSection }
             }
@@ -143,6 +164,9 @@ private struct TransferForm: View {
                 }
             }
             .interactiveDismissDisabled(working)
+            .sheet(item: $historyCandidate) { candidate in
+                HistoryImportPreview(ledger: ledger, candidate: candidate)
+            }
             .confirmationDialog("Replace saved data with this backup?", isPresented: $confirmRestore, titleVisibility: .visible) {
                 Button("Restore Backup", role: .destructive) {
                     let snapshot = restoreCandidate
@@ -263,10 +287,29 @@ private struct TransferForm: View {
             preview = data.count <= 100_000 ? String(decoding: data, as: UTF8.self)
                 : "The complete packet is too large for an inline preview. Open the shared file to inspect all contents."
             preparedFile = url; preparedMode = mode; preparedGeneration = ledger.workspace.generation
+            do { try copyReview(url) }
+            catch { transferNotice = error.localizedDescription }
         }
     }
     private func preparedFileReset() {
-        preparedFile = nil; preparedMode = nil; preparedGeneration = nil; preview = ""
+        preparedFile = nil; preparedMode = nil; preparedGeneration = nil; preview = ""; transferNotice = nil
+    }
+    private func copyReview(_ url: URL) throws {
+        let text = try ClipboardExchange.reviewText(Data(contentsOf: url))
+        UIPasteboard.general.setItems([[UTType.utf8PlainText.identifier: text]], options: [.localOnly: true, .expirationDate: Date().addingTimeInterval(3600)])
+        transferNotice = "Copied to this iPad's clipboard. Paste into ChatGPT. Clipboard copy expires after one hour; copying is not acknowledgement."
+    }
+    private func importData(_ data: Data) throws {
+        struct Header: Decodable { let purpose: String; let id: UUID }
+        let header = try ExchangeJSON.decode(Header.self, from: data)
+        if header.purpose == "fintrack-history-import" {
+            historyCandidate = try HistoryImport.decode(data)
+            return
+        }
+        let known = ledger.workspace.staged.contains { $0.id == header.id } || ledger.workspace.importReceipts?.contains { $0.id == header.id } == true
+        try ledger.stageIncoming(data)
+        transferNotice = known ? "This file was already received. No financial records were changed by pasting it again."
+            : "Imported. Read answers in Discussions; review any proposed record changes or weekly additions below."
     }
     private func attempt(_ action: () throws -> Void) {
         do { try action() } catch { failure = error.localizedDescription }
@@ -274,7 +317,7 @@ private struct TransferForm: View {
     private func pick(_ purpose: FilePurpose) { filePurpose = purpose; showFilePicker = true }
     private func handleSelection(_ result: Result<URL, Error>) {
         switch filePurpose {
-        case .review: receive(result) { try ledger.stageIncoming($0) }
+        case .review: receive(result) { try importData($0) }
         case .restore:
             switch result {
             case .failure(let error): if (error as? CocoaError)?.code != .userCancelled { failure = error.localizedDescription }
@@ -312,6 +355,63 @@ private struct TransferForm: View {
                 catch { failure = error.localizedDescription }
             }
         }
+    }
+}
+
+@MainActor
+private struct HistoryImportPreview: View {
+    var ledger: LedgerViewModel
+    let candidate: HistoryImport
+    @Environment(\.dismiss) private var dismiss
+    @State private var reviewed = false
+    @State private var failure: String?
+    var body: some View {
+        NavigationStack {
+            List {
+                Section("History migration") {
+                    Text(candidate.sourceName)
+                    Text("\(candidate.rows.count) records; net control total \(candidate.audit.netAmountMinorUnits) minor units.")
+                    Text("\(candidate.rows.filter { $0.approval == .confirmed }.count) prior explicit approvals will be preserved. Resolved assistant questions/reasons are cleared by the retention policy.")
+                    Text("Creates and verifies a separate ledger. The current ledger is preserved in Backup. This is an initial migration, not a merge of weekly changes.")
+                    DisclosureGroup("Prior approvals supplied by the source") {
+                        ForEach(candidate.rows.filter { $0.approval == .confirmed }, id: \.id) { row in
+                            Text(row.sourceRow + " · " + row.merchant + ": " + row.approvalEvidence).font(.caption)
+                        }
+                    }
+                    DisclosureGroup("Imported category catalog") {
+                        ForEach(candidate.categories) { category in
+                            Text(category.label + " (" + category.id + ")" + (category.unresolved ? " · unresolved" : "") + (category.excluded ? " · excluded" : ""))
+                        }
+                    }
+                }
+                Section("Sanity check") {
+                    HistoryAuditView(audit: candidate.audit)
+                    ForEach(Array(candidate.reviewWarnings.enumerated()), id: \.offset) { entry in Text(entry.element).font(.callout) }
+                    Toggle("I compared source counts and totals and reviewed prior approvals, omissions and limitations", isOn: $reviewed)
+                    Button("Import Into Separate Ledger") {
+                        do { try ledger.importHistory(candidate); dismiss() }
+                        catch { failure = error.localizedDescription }
+                    }.disabled(!reviewed)
+                }
+            }
+            .navigationTitle("Review History Import")
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
+            .alert("History Not Imported", isPresented: Binding(get: { failure != nil }, set: { if !$0 { failure = nil } })) {
+                Button("OK") { failure = nil }
+            } message: { Text(failure ?? "") }
+        }
+    }
+}
+
+private struct HistoryAuditView: View {
+    let audit: HistoryAudit
+    var body: some View {
+        Text("Source rows: \(audit.sourceRowCount). Net control total: \(audit.netAmountMinorUnits) minor units.")
+        ForEach(Array(audit.columns.enumerated()), id: \.offset) { entry in
+            Text(entry.element.name + " → " + entry.element.handling + ": " + entry.element.target + ". " + entry.element.explanation).font(.caption)
+        }
+        ForEach(Array(audit.excludedRows.enumerated()), id: \.offset) { entry in Text("Excluded " + entry.element.sourceRow + ": " + entry.element.reason).font(.caption) }
+        ForEach(Array(audit.warnings.enumerated()), id: \.offset) { entry in Text(entry.element).font(.caption) }
     }
 }
 

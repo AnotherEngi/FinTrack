@@ -1,5 +1,11 @@
 # Device verification record
 
+Latest user report: prior Mac tests and actual iCloud backup/download/restore pass.
+The subsequent clipboard/summary/history-import batch passed 119 portable tests
+and syntax-parsed 19 Apple files on Windows. New native tests, UI/clipboard,
+real-history migration and weekly trial remain pending for this revision. See
+[the combined session](real-data-trial.md).
+
 Mac lifecycle test report: user screenshot shows 41 persistence tests executed,
 with four issues in three tests. Source fixes address the ambiguous atomic-import
 fixture, approval's resolved-assistant-text expectation, and recovery pointer

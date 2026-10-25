@@ -16,6 +16,7 @@ struct TransactionEditorView: View {
     @State private var showDiscussion = false
     @State private var showRefundPurchases = false
     @State private var refundSearch = ""
+    @State private var visibilityFailure: String?
     @FocusState private var noteFocused: Bool
 
     init(ledger: LedgerViewModel, draft: EditorDraft, startDiscussion: Bool = false,
@@ -81,6 +82,19 @@ struct TransactionEditorView: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 if draft.input.treatment == .refund || !(draft.input.refundAllocations ?? []).isEmpty { refundSection }
+                Section("Overview visibility") {
+                    Toggle("Hide this transaction from Overview", isOn: Binding(
+                        get: { ledger.workspace.summaryVisibility?.recordIDs.contains(draft.id) == true },
+                        set: { hidden in
+                            do { try ledger.setSummaryHidden(hidden, recordID: draft.id) }
+                            catch { visibilityFailure = error.localizedDescription }
+                        })).disabled(currentRecord == nil)
+                    if let record = currentRecord, let rules = ledger.workspace.summaryVisibility,
+                       rules.categoryIDs.contains(record.draft.categoryID ?? "") || !rules.tags.isDisjoint(with: record.draft.tags) {
+                        Text("A hidden category or tag also hides this transaction. Manage that rule in Visibility.").font(.caption).foregroundStyle(.secondary)
+                    }
+                    if currentRecord == nil { Text("Save a valid transaction before changing visibility.").font(.caption).foregroundStyle(.secondary) }
+                }
                 Section("Your Note to ChatGPT") {
                     TextField("Your note", text: $draft.input.notes, axis: .vertical).lineLimit(3...8)
                         .focused($noteFocused)
@@ -128,6 +142,14 @@ struct TransactionEditorView: View {
                             .font(.callout).foregroundStyle(.secondary)
                     }
                 }
+                if let fields = ledger.workspace.historyDetails?[draft.id.uuidString], !fields.isEmpty {
+                    Section("Preserved Sheet Details") {
+                        Text("Read-only source details. Preserved split, reimbursement or subcategory fields do not become supported calculations merely by being imported.").font(.caption).foregroundStyle(.secondary)
+                        ForEach(fields.keys.sorted(), id: \.self) { key in
+                            LabeledContent(key) { Text(fields[key] ?? "").textSelection(.enabled) }
+                        }
+                    }
+                }
                 Section {
                     Text(status).font(.callout).accessibilityLabel("Save status: \(status)")
                     if needsRetry { Button("Retry Save") { saveChangedInput() } }
@@ -146,6 +168,9 @@ struct TransactionEditorView: View {
             .onChange(of: draft.input) { _, _ in pendingRequest = nil; saveChangedInput() }
             .task { if startDiscussion { noteFocused = true } }
             .interactiveDismissDisabled(draftWriteFailed)
+            .alert("Visibility Not Saved", isPresented: Binding(get: { visibilityFailure != nil }, set: { if !$0 { visibilityFailure = nil } })) {
+                Button("OK") { visibilityFailure = nil }
+            } message: { Text(visibilityFailure ?? "") }
             .sheet(isPresented: $showDiscussion) { DiscussionDetailView(ledger: ledger, recordID: draft.id) }
             .sheet(isPresented: $showRefundPurchases) { refundPurchasePicker }
             .confirmationDialog("Discard unsaved input? Previously saved edits will remain.",

@@ -8,7 +8,7 @@ import FinTrackPersistence
 final class LedgerViewModel {
     private var repository: LocalTransactionRepository?
     private var draftStore: DraftStore?
-    let catalog = ReviewCatalog.prototype
+    private(set) var catalog = ReviewCatalog.prototype
     private(set) var records: [LedgerTransaction] = []
     private(set) var drafts: [EditorDraft] = []
     private(set) var startupFailure: String?
@@ -27,6 +27,14 @@ final class LedgerViewModel {
             try repository.saveSummaryVisibility(value)
             reload()
         } catch { message = "Visibility settings were not saved: " + error.localizedDescription }
+    }
+
+    func setSummaryHidden(_ hidden: Bool, recordID: UUID) throws {
+        guard let repository else { throw LedgerError.recordNotFound }
+        var value = try repository.workspace().summaryVisibility ?? .init()
+        if hidden { value.recordIDs.insert(recordID) } else { value.recordIDs.remove(recordID) }
+        try repository.saveSummaryVisibility(value)
+        reload()
     }
 
     init() {
@@ -60,7 +68,7 @@ final class LedgerViewModel {
             let savedDrafts = try draftStore.fetchAll()
             let savedWorkspace = try repository.workspace()
             let savedDiscussions = savedWorkspace.discussions(in: savedRecords)
-            records = savedRecords; drafts = savedDrafts; workspace = savedWorkspace
+            records = savedRecords; drafts = savedDrafts; workspace = savedWorkspace; catalog = repository.catalog
             discussions = Dictionary(uniqueKeysWithValues: savedDiscussions.map { ($0.id, $0) })
             let capacity = try repository.capacityUsage()
             capacityNotice = capacity.records >= BackupCapacity.maximumRecords * 4 / 5
@@ -150,6 +158,18 @@ final class LedgerViewModel {
         guard let repository else { throw LedgerError.recordNotFound }
         try repository.stageIncoming(data); reload()
     }
+    func importHistory(_ value: HistoryImport) throws {
+        let snapshot = try value.snapshot()
+        if let previous = workspace.historyImport {
+            if previous.id == value.id, previous.digest == snapshot.workspace.historyImport?.digest {
+                message = "This history was already imported. Current edits were preserved."
+                return
+            }
+            throw ExchangeError.invalid("History is already established in this ledger. Use weekly intake for additions; a second history migration was not applied.")
+        }
+        try restoreBackup(snapshot)
+        message = "Imported \(snapshot.records.count) history records. The previous ledger is preserved in Backup. Review the imported audit and compare totals with the original Sheet."
+    }
     func dismissIncoming(_ id: UUID) throws {
         guard let repository else { throw LedgerError.recordNotFound }
         try repository.dismissIncoming(fileID: id); reload()
@@ -218,7 +238,7 @@ final class LedgerViewModel {
     }
 
     private func validateRawDrafts(_ value: FullBackup) throws {
-        try value.validate(catalog: catalog)
+        try value.validate(catalog: .prototype)
         for (id, raw) in value.workspace.drafts {
             let draft = try JSONDecoder().decode(EditorDraft.self, from: raw)
             guard draft.id.uuidString == id, draft.expectedRevision.map({ $0 > 0 }) ?? true else {
@@ -234,13 +254,14 @@ final class LedgerViewModel {
 
     func restoreBackup(_ value: FullBackup) throws {
         try validateRawDrafts(value)
+        let restoredCatalog = try value.workspace.effectiveCatalog(fallback: .prototype)
         let directory = try LocalTransactionRepository.applicationSupportDirectory()
-        let id = try StoreRecovery.prepare(value, in: directory, catalog: catalog)
+        let id = try StoreRecovery.prepare(value, in: directory, catalog: restoredCatalog)
         let preparedURL = directory.appendingPathComponent("Stores", isDirectory: true)
             .appendingPathComponent(id.uuidString, isDirectory: true).appendingPathComponent("FinTrack.store")
-        let opened = try LocalTransactionRepository(storeURL: preparedURL, catalog: catalog)
+        let opened = try LocalTransactionRepository(storeURL: preparedURL, catalog: restoredCatalog)
         let openedDrafts = try DraftStore(directory: directory.appendingPathComponent("Drafts", isDirectory: true), repository: opened)
-        try StoreRecovery.activate(id, in: directory, catalog: catalog)
+        try StoreRecovery.activate(id, in: directory, catalog: restoredCatalog)
         repository = opened; draftStore = openedDrafts; startupFailure = nil
         sessionChanges = SessionChanges()
         reload(); refreshPreservedStores()

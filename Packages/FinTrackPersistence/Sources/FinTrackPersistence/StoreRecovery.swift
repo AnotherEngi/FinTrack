@@ -47,7 +47,10 @@ public enum StoreRecovery {
                   restored.workspace.pending == snapshot.workspace.pending,
                   restored.workspace.knowledge == snapshot.workspace.knowledge,
                   restored.workspace.drafts == snapshot.workspace.drafts,
-                  restored.workspace.summaryVisibility == snapshot.workspace.summaryVisibility else {
+                  restored.workspace.summaryVisibility == snapshot.workspace.summaryVisibility,
+                  restored.workspace.importedCategories == snapshot.workspace.importedCategories,
+                  restored.workspace.historyImport == snapshot.workspace.historyImport,
+                  restored.workspace.historyDetails == snapshot.workspace.historyDetails else {
                 throw ExchangeError.invalid("The isolated restore did not match the archive. The active store is unchanged.")
             }
             return id

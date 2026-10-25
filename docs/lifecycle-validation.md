@@ -1,5 +1,11 @@
 # Lifecycle implementation and verification
 
+Newer clipboard/summary/history follow-up and current test evidence are in
+[the private trial guide](real-data-trial.md): 119 portable tests pass; 19 native
+files parse; new Mac/iPad checks remain. The user reports the earlier Mac suite
+and iCloud backup/download/restore passed, superseding the pending result below
+for that earlier revision only.
+
 2026-10-25. Implements the recommended first safety batch plus the user's
 approval/retention decision. Initially prepared without execution under the prior
 command preference; the user subsequently authorized all available local checks.

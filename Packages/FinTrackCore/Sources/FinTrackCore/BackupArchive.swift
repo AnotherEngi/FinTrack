@@ -212,6 +212,7 @@ public enum BackupArchive {
         base.knowledge = []; base.sourceLinks = []; base.drafts = [:]; base.discussionReplies = nil
         base.resolvedDiscussions = nil; base.discussionDrafts = nil; base.summaryVisibility = nil
         base.importReceipts = nil; base.retiredPacketIDs = nil; base.discussionAnswers = nil; base.discussionClosedRevisions = nil
+        base.importedCategories = nil; base.historyImport = nil; base.historyDetails = nil
         func item<T: Encodable>(_ value: T, _ field: String, _ key: String? = nil) throws { try emit(field, key, encoder().encode(value)) }
         try item(base, "workspace")
         for value in workspace.pending { try item(value, "pending") }
@@ -230,11 +231,14 @@ public enum BackupArchive {
         for value in (workspace.retiredPacketIDs ?? []).sorted(by: { $0.uuidString < $1.uuidString }) { try item(value, "retiredPacketIDs") }
         for value in workspace.discussionAnswers ?? [] { try item(value, "discussionAnswers") }
         for key in (workspace.discussionClosedRevisions ?? [:]).keys.sorted() { try item(workspace.discussionClosedRevisions![key]!, "discussionClosedRevisions", key) }
+        for value in workspace.importedCategories ?? [] { try item(value, "importedCategories") }
+        if let receipt = workspace.historyImport { try item(receipt, "historyImport") }
+        for key in (workspace.historyDetails ?? [:]).keys.sorted() { try item(workspace.historyDetails![key]!, "historyDetails", key) }
     }
 
     private static func apply(_ data: Data, field: String, key: String?, to value: inout ReviewWorkspace) throws {
         func decode<T: Decodable>(_ type: T.Type) throws -> T { try JSONDecoder().decode(type, from: data) }
-        let dictionaries: Set<String> = ["drafts", "resolvedDiscussions", "discussionDrafts", "discussionClosedRevisions"]
+        let dictionaries: Set<String> = ["drafts", "resolvedDiscussions", "discussionDrafts", "discussionClosedRevisions", "historyDetails"]
         guard (key != nil) == dictionaries.contains(field) else { throw ExchangeError.invalid("Invalid archive entry key.") }
         switch field {
         case "pending": value.pending.append(try decode(FeedbackEvent.self))
@@ -253,6 +257,9 @@ public enum BackupArchive {
         case "retiredPacketIDs": if value.retiredPacketIDs == nil { value.retiredPacketIDs = [] }; guard value.retiredPacketIDs?.insert(try decode(UUID.self)).inserted == true else { throw ExchangeError.invalid("Duplicate retired packet ID.") }
         case "discussionAnswers": if value.discussionAnswers == nil { value.discussionAnswers = [] }; value.discussionAnswers?.append(try decode(DiscussionAnswer.self))
         case "discussionClosedRevisions": if value.discussionClosedRevisions == nil { value.discussionClosedRevisions = [:] }; value.discussionClosedRevisions?[key!] = try decode(String.self)
+        case "importedCategories": if value.importedCategories == nil { value.importedCategories = [] }; value.importedCategories?.append(try decode(ReviewCategory.self))
+        case "historyImport": guard value.historyImport == nil else { throw ExchangeError.invalid("Duplicate history import receipt.") }; value.historyImport = try decode(HistoryImportReceipt.self)
+        case "historyDetails": if value.historyDetails == nil { value.historyDetails = [:] }; value.historyDetails?[key!] = try decode([String: String].self)
         default: throw ExchangeError.invalid("Unsupported archive section: " + field)
         }
     }

@@ -8,7 +8,8 @@ public final class LocalTransactionRepository: TransactionRepository {
     private let container: ModelContainer
     private let context: ModelContext
     private let commit: (ModelContext) throws -> Void
-    public let catalog: ReviewCatalog
+    private let fallbackCatalog: ReviewCatalog
+    public private(set) var catalog: ReviewCatalog
 
     public convenience init(storeURL: URL, catalog: ReviewCatalog = .prototype) throws {
         try self.init(storeURL: storeURL, catalog: catalog, commit: { try $0.save() })
@@ -30,7 +31,9 @@ public final class LocalTransactionRepository: TransactionRepository {
         container = openedContainer
         context = openedContext
         self.commit = commit
+        self.fallbackCatalog = catalog
         self.catalog = catalog
+        self.catalog = try workspace().effectiveCatalog(fallback: catalog)
     }
 
     /// Unmarked stores/drafts predate the agreed positive-outflow convention.
@@ -582,7 +585,10 @@ public final class LocalTransactionRepository: TransactionRepository {
 
     /// Caller validates app-specific raw drafts before this atomic replacement.
     public func restore(_ backup: FullBackup) throws {
-        try backup.validate(catalog: catalog)
+        try backup.validate(catalog: fallbackCatalog)
+        let previousCatalog = catalog
+        catalog = try backup.workspace.effectiveCatalog(fallback: fallbackCatalog)
+        do {
         try committing {
             let wanted = Set(backup.records.map(\.id))
             let existing = try context.fetch(FetchDescriptor<Row>())
@@ -598,5 +604,6 @@ public final class LocalTransactionRepository: TransactionRepository {
             workspace.legacyDraftsMigrated = true
             try writeWorkspace(workspace)
         }
+        } catch { catalog = previousCatalog; throw error }
     }
 }
