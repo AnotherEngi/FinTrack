@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 import FinTrackCore
 
 public struct PreservedStore: Identifiable, Sendable {
@@ -63,14 +64,32 @@ public enum StoreRecovery {
         let check = try LocalTransactionRepository(storeURL: target, catalog: catalog)
         try check.backup().validate(catalog: catalog)
         let pointer = pointerURL(directory)
-        let replacement = directory.appendingPathComponent(".ActiveStore-\(UUID().uuidString).json")
-        defer { try? FileManager.default.removeItem(at: replacement) }
+        let replacing = FileManager.default.fileExists(atPath: pointer.path)
+        if replacing {
+            let info = try pointer.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
+            guard info.isRegularFile == true, info.isSymbolicLink != true else {
+                throw ExchangeError.invalid("The active database pointer is not a regular file. It was preserved; recovery was not activated.")
+            }
+        }
+        // When replacing, this name receives the old pointer in the same atomic
+        // operation that publishes the new one. Never read the damaged bytes or
+        // inherit their permissions, and never remove the old pointer first.
+        let name = replacing ? "PreviousStore-\(UUID().uuidString).json" : ".ActiveStore-\(UUID().uuidString).json"
+        let replacement = directory.appendingPathComponent(name)
+        var preserveReplacement = false
+        defer { if !preserveReplacement { try? FileManager.default.removeItem(at: replacement) } }
         try JSONEncoder().encode(Pointer(directory: id)).write(to: replacement, options: .atomic)
-        if FileManager.default.fileExists(atPath: pointer.path) {
-            // Preserve/replace through the filesystem; never decode or load the
-            // damaged pointer as a prerequisite for recovery.
-            _ = try FileManager.default.replaceItemAt(pointer, withItemAt: replacement,
-                backupItemName: "PreviousStore-\(UUID().uuidString).json", options: [.usingNewMetadataOnly, .withoutDeletingBackupItem])
+        if replacing {
+            let result = try replacement.withUnsafeFileSystemRepresentation { source in
+                try pointer.withUnsafeFileSystemRepresentation { destination in
+                    guard let source, let destination else { throw PersistenceError.invalidStoredValue }
+                    return Darwin.renamex_np(source, destination, UInt32(RENAME_SWAP))
+                }
+            }
+            // Unsupported swaps and permission failures leave the original in
+            // place. Do not fall back to a non-atomic remove/move sequence.
+            guard result == 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+            preserveReplacement = true
         } else { try FileManager.default.moveItem(at: replacement, to: pointer) }
     }
     public static func preservedStores(in directory: URL) throws -> [PreservedStore] {

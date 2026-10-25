@@ -130,7 +130,9 @@ private enum SimulatedFailure: Error { case diskWrite }
     #expect(saved.discussionRequested)
     #expect(saved.reviewHistory.count == 2)
     #expect(saved.draft.notes == "My own note")
-    #expect(saved.assistantContext == original.assistantContext)
+    #expect(saved.assistantContext.question.isEmpty)
+    #expect(saved.assistantContext.reason.isEmpty)
+    #expect(saved.assistantContext.ledgerNotes == original.assistantContext.ledgerNotes)
 }
 
 @MainActor

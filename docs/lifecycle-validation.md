@@ -14,6 +14,35 @@ confirm that this was syntax parsing without an Apple SDK, not native typechecki
 See the complete
 [data inventory and retention policy](data-retention.md).
 
+## Mac regression follow-up
+
+The user supplied a Mac run of 41 persistence tests reporting four issues in
+three tests. This confirms native test compilation/execution for that revision,
+not an overall pass. Corrections in this follow-up:
+
+- The atomic-add/rollback fixture previously supplied identical merchant/date/
+  amount facts under two IDs. The stricter duplicate guard correctly stopped
+  before the simulated save failure. Two distinct fictional merchants now let
+  this test reach the save boundary; ambiguous purchases still have dedicated
+  rejection/rollback coverage.
+- The reopen test now requires approval to clear assistant questions/reasons
+  while preserving earlier ledger notes, user notes, review history and approval.
+- Foundation replacement failed with Cocoa permission error 513 on a mode-000
+  pointer. Recovery now prepares the new pointer under its future PreviousStore
+  filename and swaps it with ActiveStore.json in one Darwin `RENAME_SWAP` call.
+  The unreadable original bytes and permissions remain at the PreviousStore name;
+  no contents are read and no original pointer is removed first. Unsupported
+  filesystem swaps fail visibly while leaving the old pointer in place. See
+  [Apple's swap-support documentation](https://developer.apple.com/documentation/foundation/urlresourcevalues/volumesupportsswaprenaming).
+- The existing recovery regression now covers mode 000 and read-only mode 400,
+  checks preserved permissions/bytes, and reopens the activated ledger. Another
+  regression rejects a directory at the pointer path without deleting evidence.
+
+Verification after these corrections: all 108 portable tests passed again on
+Windows Swift 6.4.1 and all 18 Apple source/test files passed syntax parsing.
+The native corrections require a new Mac run. Windows cannot execute SwiftData
+or Darwin filesystem behavior; parser success does not validate those operations.
+
 ## Implemented source changes
 
 - Approve and Mark Resolved close the current discussion; saved notes/last user
@@ -55,9 +84,9 @@ See the complete
   atomically changes the active pointer. Prior stores remain user-deletable
   recovery copies. Missing selected stores/legacy store files are not silently
   recreated. Explicit Create Separate Empty Ledger is a recovery choice.
-  Pointer replacement uses the [filesystem replacement API](https://developer.apple.com/documentation/foundation/filemanager/replaceitemat%28_%3Awithitemat%3Abackupitemname%3Aoptions%3A%29)
-  with new metadata and preserved previous bytes, avoiding a prerequisite read of
-  an unreadable pointer or propagation of its damaged permissions.
+  Pointer replacement now uses Darwin's atomic swap (see the Mac follow-up
+  above), preserving the original inode without reading its contents or copying
+  damaged permissions onto the new pointer.
 - Both intake addition paths examine linked/unlinked rows and same-batch candidates.
   Merchant/date evidence flags tip/date/ID variants for explicit reconciliation;
   it never automatically merges equal purchases. Batch failures save no additions.

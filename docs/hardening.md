@@ -1,5 +1,12 @@
 # Exchange and backup hardening pass
 
+Mac regression follow-up: corrected two stale fixture/retention expectations and
+replaced recovery's Foundation pointer replacement with an atomic Darwin swap.
+The damaged pointer remains preserved with its original bytes/permissions; there
+is no delete/move fallback when swapping fails. Regression coverage includes
+unreadable/read-only pointer files and directory-path rejection. See
+[reported failures and verification](lifecycle-validation.md). Mac rerun pending.
+
 ## Latest lifecycle safety batch: Windows verified, Apple execution pending
 
 See [implemented changes and verification](lifecycle-validation.md) and

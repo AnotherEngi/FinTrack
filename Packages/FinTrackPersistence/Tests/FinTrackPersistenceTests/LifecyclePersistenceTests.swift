@@ -162,7 +162,8 @@ private func stageWeekly(_ repository: LocalTransactionRepository, _ rows: [Week
     #expect(try StoreRecovery.activeURL(in: directory) != url)
 }
 
-@MainActor @Test func recoveryReplacesAnUnreadableMalformedPointerWithoutDecodingIt() throws {
+@MainActor @Test(arguments: [0, 0o400])
+func recoveryReplacesAnUnreadableMalformedPointerWithoutDecodingIt(permissions: Int) throws {
     let directory = try lifecycleDirectory(); defer { try? FileManager.default.removeItem(at: directory) }
     let record = try SyntheticTransactions.make()[0]
     let backup = FullBackup(records: [record], workspace: .init())
@@ -171,15 +172,33 @@ private func stageWeekly(_ repository: LocalTransactionRepository, _ rows: [Week
     let pointer = directory.appendingPathComponent("ActiveStore.json")
     let damaged = Data("SYNTHETIC MALFORMED POINTER".utf8)
     try damaged.write(to: pointer)
-    try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: pointer.path)
+    try FileManager.default.setAttributes([.posixPermissions: permissions], ofItemAtPath: pointer.path)
     #expect(throws: (any Error).self) { try StoreRecovery.activeURL(in: directory) }
     let next = try StoreRecovery.prepare(backup, in: directory)
     try StoreRecovery.activate(next, in: directory)
     #expect(try StoreRecovery.activeURL(in: directory).deletingLastPathComponent().lastPathComponent == next.uuidString)
     let preserved = try #require(FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
         .first { $0.lastPathComponent.hasPrefix("PreviousStore-") })
+    let attributes = try FileManager.default.attributesOfItem(atPath: preserved.path)
+    #expect((attributes[.posixPermissions] as? NSNumber)?.intValue == permissions)
     try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: preserved.path)
     #expect(try Data(contentsOf: preserved) == damaged)
+    #expect(try LocalTransactionRepository(storeURL: StoreRecovery.activeURL(in: directory)).fetchAll() == [record])
+}
+
+@MainActor @Test func recoveryRejectsADirectoryPointerWithoutRemovingItsContents() throws {
+    let directory = try lifecycleDirectory(); defer { try? FileManager.default.removeItem(at: directory) }
+    let record = try SyntheticTransactions.make()[0]
+    let next = try StoreRecovery.prepare(.init(records: [record], workspace: .init()), in: directory)
+    let pointer = directory.appendingPathComponent("ActiveStore.json", isDirectory: true)
+    try FileManager.default.createDirectory(at: pointer, withIntermediateDirectories: false)
+    let original = pointer.appendingPathComponent("synthetic-recovery-evidence.txt")
+    let bytes = Data("SYNTHETIC PRESERVED EVIDENCE".utf8)
+    try bytes.write(to: original)
+    #expect(throws: (any Error).self) { try StoreRecovery.activate(next, in: directory) }
+    #expect(try Data(contentsOf: original) == bytes)
+    #expect(try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
+        .allSatisfy { !$0.lastPathComponent.hasPrefix("PreviousStore-") })
 }
 
 @MainActor @Test func unreadSummarySurvivesCompactionUntilOpenedAndReplayDoesNotRecreateIt() throws {

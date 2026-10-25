@@ -133,6 +133,13 @@ which checks actually ran here and which require the Mac or physical iPad.
 
 ### Implementation state
 
+- Latest Mac test report: the user ran 41 persistence tests; three tests failed
+  with four issues. Source corrections separate the atomic-import save fixture
+  from duplicate review, expect approval to clear resolved assistant text, and
+  replace unreadable recovery pointers through a same-volume atomic Darwin swap.
+  The original pointer is retained under PreviousStore-<UUID>.json; unsupported
+  swaps fail without removing it. Native regression rerun and app build remain
+  required. See docs/lifecycle-validation.md for the follow-up and actual checks.
 - Latest lifecycle/retention safety batch: all 108 portable tests passed on
   Windows Swift 6.4.1 on 2026-10-25; all 18 Apple app/persistence source/test
   files passed syntax parsing. Native package tests, Apple typechecking/build,

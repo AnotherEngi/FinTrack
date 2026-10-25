@@ -351,9 +351,11 @@ private enum ExchangeWriteFailure: Error { case disk }
     let repository = try LocalTransactionRepository(storeURL: directory.appendingPathComponent("test.store"), commit: { context in
         if fail { throw ExchangeWriteFailure.disk }; try context.save()
     })
-    let rows = ["synthetic-a", "synthetic-b"].map {
-        WeeklyTransaction(identity: .init(sourceAlias: "Fictional Card", transactionID: $0),
-            date: "2026-10-10", merchant: "Synthetic Shop", amountMinorUnits: "1000")
+    // Distinct merchants keep this save/rollback test out of duplicate review.
+    // Ambiguous same-merchant rows have separate regression coverage.
+    let rows = [("synthetic-a", "Fictional Bakery"), ("synthetic-b", "Synthetic Bookshop")].map { identity, merchant in
+        WeeklyTransaction(identity: .init(sourceAlias: "Fictional Card", transactionID: identity),
+            date: "2026-10-10", merchant: merchant, amountMinorUnits: "1000")
     }
     let batch = WeeklyBatch(coverage: "Two distinct source purchases", transactions: rows)
     try repository.stageIncoming(ExchangeJSON.encode(batch))
@@ -364,5 +366,5 @@ private enum ExchangeWriteFailure: Error { case disk }
     fail = false
     #expect(try repository.acceptNewWeeklyBatch(fileID: batch.id) == 2)
     #expect(try repository.acceptNewWeeklyBatch(fileID: batch.id) == 0)
-    #expect(try repository.fetchAll().count == 2) // same facts, different genuine IDs
+    #expect(try repository.fetchAll().count == 2)
 }

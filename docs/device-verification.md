@@ -1,5 +1,11 @@
 # Device verification record
 
+Mac lifecycle test report: user screenshot shows 41 persistence tests executed,
+with four issues in three tests. Source fixes address the ambiguous atomic-import
+fixture, approval's resolved-assistant-text expectation, and recovery pointer
+permission error 513. See [the follow-up](lifecycle-validation.md). Native rerun
+and the updated app/device/cloud checks are pending; do not record this as a pass.
+
 2026-10-25 lifecycle update: source now adds retention/compaction, independent
 startup recovery, archive v2, and intake/guidance fixes. **108 portable tests
 passed on Windows Swift 6.4.1; all 18 Apple files passed syntax parsing.** Native
