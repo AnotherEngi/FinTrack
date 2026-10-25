@@ -110,7 +110,7 @@ write failures, and offline use remain requirements for the eventual SwiftUI vie
 | Area | Current app | Required next design/model work |
 | --- | --- | --- |
 | Source column | Optional local source UUID and per-record display label; weekly v1 intake adds separate scoped provider IDs and original/latest evidence | Actual bank adapters, real-history migration, and a global source catalog remain future work |
-| Classification origin | Persisted category/tag origins; manual edits become user-origin, accepted assistant proposals retain assistant origin, approval/reopen retains origins | Validate native proposal acceptance; older unknown origins stay neutral |
+| Classification origin | Persisted category/tag origins; manual edits become user-origin, accepted assistant proposals retain assistant origin, approval/reopen retains origins | All populated values have pills; unknown historical authors remain unknown but display orange needs-review |
 | Session marker | Successful distinct saves/actions register in the long-lived ledger model | Validate lifecycle behavior on iPad; never derive it from timestamps alone |
 | Discussion waiting | Existing requests default to awaiting export; explicit Discuss records an action ID; open discussions remain in prepared reviews | Imported processing receipts are separate from this flag; sharing is not a receipt |
 | Discussion in progress | An explicit Mark Reviewing in ChatGPT action persists the user's own workflow state | Automatic processing visibility still requires a settled integration |
@@ -121,12 +121,20 @@ launch. A named review batch or explicit reset can be a later refinement if
 requested. The HTML preview uses its own
 loaded lifetime and marks successful demo edits/review actions.
 
-Unknown historical provenance must stay neutral/unavailable. Do not label all
-unreviewed records orange or infer manual ownership from the current revision.
+The latest user feedback supersedes the old neutral fallback: unknown historical
+provenance stays unknown in data but displays an orange needs-review pill. Known
+manual edits remain blue and approved classifications green. Never infer manual
+ownership from the current revision or claim an unknown author was ChatGPT.
 The category pill describes classification provenance/status. A bank's merchant
 name is not an LLM classification and must not inherit category/approval colors.
 
 ## Preview and validation
+
+Latest native additions: a thin question column after activity opens Discussions
+and sorts open questions; activity stays session/draft-only. Minimum column width
+is now 968 points (44 more than the earlier table). Separate up/down-arrow toolbar
+actions open Send or Import. The existing HTML preview predates these additions;
+use [current native flow](../review-flow.md) for discussion/export/overview design.
 
 The preview has invented merchant/source names, amounts, categories, and tags.
 It demonstrates mixed tag origins, accepted values of either origin, a pending

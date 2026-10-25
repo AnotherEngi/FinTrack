@@ -29,8 +29,15 @@ Review history remain available. Merchant text is always plain.
 - Review with ChatGPT automatically prepares one JSON file with pending additions,
   edits, decisions, open questions, relevant context, and classification guidance.
 - Full History Review includes all accepted records. No date/search filter hides work.
-- Import ChatGPT results, explicitly record receipts, and accept/reject individual
-  classification or guidance proposals. Stale proposals cannot replace newer edits.
+- Import ChatGPT replies with matching acknowledgements recorded automatically.
+  Read discussion answers, reply, or resolve them. Only actual classification/
+  guidance changes use Apply changes/Keep current; stale edits are blocked.
+- Send, Import reply, and Backup are separate pages. Prepared files identify their
+  mode and freeze until Start Another Review. Full backup export opens Files.
+- Discussions makes both question directions explicit, with recoverable reply
+  drafts and a question column in Transactions. Overview shows native category,
+  monthly, and year-comparison charts with exact totals and transaction drilldowns.
+  See [current flow](docs/review-flow.md).
 - Import structured weekly batches with genuine source IDs, add new rows atomically,
   and explicitly reconcile source changes or ambiguous purchases.
 - Enable automatic backup by selecting a dedicated **iCloud Drive** folder once.
@@ -69,11 +76,11 @@ iPad; do not uninstall or delete its store to resolve a migration failure. No
 CloudKit capability is required for the user-selected iCloud Drive folder.
 
 Windows can run `scripts/Test-Core.ps1` with the installed Swift/VS tools. Windows
-verification for this batch: all **65** portable tests pass; all 12 Apple source/
+verification for this batch: all **77** portable tests pass; all 14 Apple source/
 test files pass syntax parsing.
 Windows
 cannot typecheck SwiftUI/SwiftData or verify iCloud behavior. The Apple persistence
-suite has 21 tests, including nine new exchange/migration/recovery cases, awaiting
+suite has 25 tests, including four new discussion/draft/receipt/example cases, awaiting
 this batch's Mac run. See [verification](docs/device-verification.md).
 
 Keep financial records and credentials out of this public repository. The agent

@@ -122,6 +122,7 @@ public struct ReviewManifest: Codable, Identifiable, Sendable {
     public let recordRevisions: [String: String]
     public let knowledgeVersion: UUID
     public let createdAt: Date
+    public let discussionRecordIDs: [UUID]?
 }
 
 public struct ReviewEnvelope: Codable, Sendable {
@@ -133,6 +134,25 @@ public struct ReviewEnvelope: Codable, Sendable {
     public let knowledge: [KnowledgeRule]
     public let snapshot: ReviewPacket?
     public let returnTemplate: ReviewResponse
+    public let discussionContext: [DiscussionThread]?
+
+    private enum CodingKeys: String, CodingKey {
+        case schemaVersion, purpose, instructions, manifest, feedback, knowledge, snapshot, returnTemplate, discussionContext
+    }
+    public func encode(to encoder: any Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(schemaVersion, forKey: .schemaVersion); try c.encode(purpose, forKey: .purpose)
+        try c.encode(instructions, forKey: .instructions); try c.encode(manifest, forKey: .manifest)
+        try c.encode(feedback, forKey: .feedback); try c.encode(knowledge, forKey: .knowledge)
+        try c.encodeIfPresent(snapshot, forKey: .snapshot)
+        try c.encode(ResponseTemplate(value: returnTemplate), forKey: .returnTemplate)
+        try c.encodeIfPresent(discussionContext, forKey: .discussionContext)
+    }
+}
+
+private struct ResponseTemplate: Encodable {
+    let value: ReviewResponse
+    func encode(to encoder: any Encoder) throws { try value.encode(to: encoder, includeEmptyAnswers: true) }
 }
 
 /// Only classification and assistant-authored context can be suggested here.
@@ -173,13 +193,46 @@ public struct ReviewResponse: Codable, Sendable {
     public let proposals: [ClassificationProposal]
     public let knowledgeProposals: [KnowledgeProposal]
     public let summary: String
+    public let answers: [DiscussionAnswer]
     public init(id: UUID = UUID(), packetID: UUID, knowledgeVersion: UUID,
                 acknowledgedOperationIDs: [UUID] = [], proposals: [ClassificationProposal] = [],
-                knowledgeProposals: [KnowledgeProposal] = [], summary: String = "") {
+                knowledgeProposals: [KnowledgeProposal] = [], summary: String = "", answers: [DiscussionAnswer] = []) {
         schemaVersion = 1; purpose = "fintrack-review-response"
         self.id = id; self.packetID = packetID; self.knowledgeVersion = knowledgeVersion
         self.acknowledgedOperationIDs = acknowledgedOperationIDs; self.proposals = proposals
         self.knowledgeProposals = knowledgeProposals; self.summary = summary
+        self.answers = answers
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case schemaVersion, purpose, id, packetID, knowledgeVersion, acknowledgedOperationIDs, proposals, knowledgeProposals, summary, answers
+    }
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        schemaVersion = try c.decode(Int.self, forKey: .schemaVersion)
+        purpose = try c.decode(String.self, forKey: .purpose)
+        id = try c.decode(UUID.self, forKey: .id)
+        packetID = try c.decode(UUID.self, forKey: .packetID)
+        knowledgeVersion = try c.decode(UUID.self, forKey: .knowledgeVersion)
+        acknowledgedOperationIDs = try c.decode([UUID].self, forKey: .acknowledgedOperationIDs)
+        proposals = try c.decode([ClassificationProposal].self, forKey: .proposals)
+        knowledgeProposals = try c.decode([KnowledgeProposal].self, forKey: .knowledgeProposals)
+        summary = try c.decode(String.self, forKey: .summary)
+        answers = try c.decodeIfPresent([DiscussionAnswer].self, forKey: .answers) ?? []
+    }
+    public func encode(to encoder: any Encoder) throws {
+        try encode(to: encoder, includeEmptyAnswers: false)
+    }
+    fileprivate func encode(to encoder: any Encoder, includeEmptyAnswers: Bool) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(schemaVersion, forKey: .schemaVersion); try c.encode(purpose, forKey: .purpose)
+        try c.encode(id, forKey: .id); try c.encode(packetID, forKey: .packetID)
+        try c.encode(knowledgeVersion, forKey: .knowledgeVersion)
+        try c.encode(acknowledgedOperationIDs, forKey: .acknowledgedOperationIDs)
+        try c.encode(proposals, forKey: .proposals); try c.encode(knowledgeProposals, forKey: .knowledgeProposals)
+        try c.encode(summary, forKey: .summary)
+        // Keep canonical bytes of older v1 responses unchanged when this is empty.
+        if includeEmptyAnswers || !answers.isEmpty { try c.encode(answers, forKey: .answers) }
     }
 }
 
@@ -273,6 +326,9 @@ public struct ReviewWorkspace: Codable, Sendable {
     public var sourceLinks: [SourceLink] = []
     public var drafts: [String: Data] = [:]
     public var legacyDraftsMigrated = false
+    public var discussionReplies: [UserDiscussionReply]?
+    public var resolvedDiscussions: [String: DiscussionBoundary]?
+    public var discussionDrafts: [String: DiscussionDraft]?
     public init() {}
 
     public mutating func recordUserChange(before: LedgerTransaction?, after: LedgerTransaction, kind: String = "user-edit") {
@@ -299,9 +355,8 @@ public struct ReviewWorkspace: Codable, Sendable {
     public mutating func prepare(records: [LedgerTransaction], catalog: ReviewCatalog,
                                  mode: ReviewMode, at: Date = .now) throws -> ReviewEnvelope {
         establishBaseline(records: records)
-        let open = Set(records.filter {
-            $0.discussionRequested || (!$0.assistantContext.question.isEmpty && $0.draft.answer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-        }.map(\.id))
+        let threads = discussions(in: records)
+        let open = Set(threads.filter { !$0.isResolved && $0.status != .draft }.map(\.recordID))
         guard mode == .fullHistory || !pending.isEmpty || !open.isEmpty else {
             throw ExchangeError.invalid("No pending feedback. Use Full history review to analyze the ledger.")
         }
@@ -311,11 +366,13 @@ public struct ReviewWorkspace: Codable, Sendable {
             catalog: catalog, options: .init(includeUserContext: true, includeAssistantContext: true), exportedAt: at)
         let manifest = ReviewManifest(id: UUID(), mode: mode, operationIDs: pending.map(\.id),
             recordRevisions: Dictionary(uniqueKeysWithValues: selected.map { ($0.id.uuidString, String($0.revision)) }),
-            knowledgeVersion: knowledgeVersion, createdAt: at)
+            knowledgeVersion: knowledgeVersion, createdAt: at,
+            discussionRecordIDs: threads.filter { !$0.isResolved && $0.status != .draft }.map(\.recordID))
         let template = ReviewResponse(packetID: manifest.id, knowledgeVersion: knowledgeVersion)
         let envelope = ReviewEnvelope(schemaVersion: 1, purpose: "fintrack-review-request",
             instructions: Self.instructions, manifest: manifest, feedback: pending,
-            knowledge: knowledge, snapshot: export?.packet, returnTemplate: template)
+            knowledge: knowledge, snapshot: export?.packet, returnTemplate: template,
+            discussionContext: threads.filter { thread in selected.contains { $0.id == thread.recordID } })
         _ = try ExchangeJSON.encode(envelope)
         manifests.append(manifest)
         return envelope
@@ -348,10 +405,10 @@ public struct ReviewWorkspace: Codable, Sendable {
         }
         if header.purpose == "fintrack-review-response" {
             let response = try ExchangeJSON.decode(ReviewResponse.self, from: canonical)
-            let proposed = Set(response.proposals.map(\.id) + response.knowledgeProposals.map(\.id))
+            let proposed = Set(response.proposals.map(\.id) + response.knowledgeProposals.map(\.id) + response.answers.map(\.id))
             for file in staged where file.purpose == "fintrack-review-response" {
                 let previous = try ExchangeJSON.decode(ReviewResponse.self, from: file.data)
-                let used = Set(previous.proposals.map(\.id) + previous.knowledgeProposals.map(\.id))
+                let used = Set(previous.proposals.map(\.id) + previous.knowledgeProposals.map(\.id) + previous.answers.map(\.id))
                 guard proposed.isDisjoint(with: used) else { throw ExchangeError.invalid("A proposal ID was reused in another response. Ask for fresh proposal IDs.") }
             }
         }
@@ -366,7 +423,10 @@ public struct ReviewWorkspace: Codable, Sendable {
             guard Set(object.keys).isSubset(of: allowed) else { throw ExchangeError.invalid("The incoming file contains unsupported fields. No changes were applied.") }
         }
         if purpose == "fintrack-review-response" {
-            try keys(object, ["schemaVersion", "purpose", "id", "packetID", "knowledgeVersion", "acknowledgedOperationIDs", "proposals", "knowledgeProposals", "summary"])
+            try keys(object, ["schemaVersion", "purpose", "id", "packetID", "knowledgeVersion", "acknowledgedOperationIDs", "proposals", "knowledgeProposals", "summary", "answers"])
+            for answer in object["answers"] as? [[String: Any]] ?? [] {
+                try keys(answer, ["id", "recordID", "expectedRevision", "text", "questionForUser"])
+            }
             for proposal in object["proposals"] as? [[String: Any]] ?? [] {
                 try keys(proposal, ["id", "recordID", "expectedRevision", "categoryID", "tags", "question", "rationale"])
             }
@@ -389,9 +449,11 @@ public struct ReviewWorkspace: Codable, Sendable {
               Set(response.acknowledgedOperationIDs).count == response.acknowledgedOperationIDs.count,
               Set(response.acknowledgedOperationIDs).isSubset(of: Set(manifest.operationIDs)),
               response.proposals.count <= 10_000, response.knowledgeProposals.count <= 1_000,
+              response.answers.count <= 10_000,
               response.summary.count <= 50_000 else { throw ExchangeError.invalid("The response does not match a prepared review packet.") }
-        let proposalIDs = response.proposals.map(\.id) + response.knowledgeProposals.map(\.id)
+        let proposalIDs = response.proposals.map(\.id) + response.knowledgeProposals.map(\.id) + response.answers.map(\.id)
         guard Set(proposalIDs).count == proposalIDs.count else { throw ExchangeError.invalid("Duplicate proposal IDs.") }
+        try validateAnswers(response, manifest: manifest)
         for proposal in response.proposals {
             guard manifest.recordRevisions[proposal.recordID.uuidString] == proposal.expectedRevision,
                   let revision = Int64(proposal.expectedRevision), revision > 0,
@@ -408,6 +470,16 @@ public struct ReviewWorkspace: Codable, Sendable {
             guard !proposal.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                   proposal.text.count <= 10_000, proposal.rationale.count <= 10_000 else {
                 throw ExchangeError.invalid("A knowledge proposal is empty or too large.")
+            }
+        }
+    }
+
+    private func validateAnswers(_ response: ReviewResponse, manifest: ReviewManifest) throws {
+        for answer in response.answers {
+            guard manifest.recordRevisions[answer.recordID.uuidString] == answer.expectedRevision,
+                  !answer.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  answer.text.count <= 50_000, (answer.questionForUser?.count ?? 0) <= 10_000 else {
+                throw ExchangeError.invalid("A discussion answer references a record outside its packet or has invalid text.")
             }
         }
     }
@@ -437,8 +509,14 @@ public struct ReviewWorkspace: Codable, Sendable {
     have examined omitted data. Do not infer approval or repayment.
     Return ONE JSON file matching returnTemplate. Keep packetID and knowledgeVersion exactly.
     Generate a new response id. Acknowledge only operation IDs actually processed, from manifest.
+    Put discussion replies in an answers array: each answer has id UUID, recordID,
+    expectedRevision string from manifest, text, optional questionForUser. Reading an answer
+    requires no acceptance. Use discussionContext for earlier user replies and ChatGPT answers.
+    Only create classification proposals for actual category/tag changes; never wrap a plain
+    discussion reply or clarification in a classification proposal. Questions for the user
+    belong in answers.questionForUser. The user may reply or mark a discussion resolved.
     Each proposal needs a unique UUID id, recordID, exact string expectedRevision from manifest,
-    rationale, and optionally categoryID, tags (complete replacement list), question. Omitted/null
+    rationale, and optionally categoryID, tags (complete replacement list). Omitted/null
     fields mean no change. Category IDs must come from snapshot.categories. Do not change amounts,
     source facts, user notes/answers, approval, or record IDs. Questions are assistant-authored.
     knowledgeProposals have id, optional replacingRuleID, text, rationale. Suggest scoped rules,
@@ -506,6 +584,22 @@ public struct FullBackup: Codable, Sendable {
             throw ExchangeError.invalid("The backup is invalid or has an unsupported version/convention.")
         }
         let ids = Set(records.map(\.id))
+        let replies = workspace.discussionReplies ?? []
+        guard Set(replies.map(\.id)).count == replies.count else { throw ExchangeError.invalid("Duplicate discussion reply IDs in backup.") }
+        for reply in replies {
+            guard ids.contains(reply.recordID), let revision = Int64(reply.sentRevision), revision > 0,
+                  String(revision) == reply.sentRevision, !reply.text.isEmpty, reply.text.count <= 10_000 else {
+                throw ExchangeError.invalid("Invalid discussion reply in backup.")
+            }
+        }
+        for (key, draft) in workspace.discussionDrafts ?? [:] {
+            guard key == draft.recordID.uuidString, ids.contains(draft.recordID),
+                  let revision = Int64(draft.expectedRevision), revision > 0, String(revision) == draft.expectedRevision,
+                  draft.text.count <= 10_000 else { throw ExchangeError.invalid("Invalid discussion draft in backup.") }
+        }
+        for key in (workspace.resolvedDiscussions ?? [:]).keys {
+            guard let id = UUID(uuidString: key), ids.contains(id) else { throw ExchangeError.invalid("Invalid resolved discussion in backup.") }
+        }
         for record in records { try record.draft.validate(); try record.validateReviewState(catalog: catalog) }
         for event in workspace.pending {
             guard event.recordID.map({ ids.contains($0) }) ?? true else { throw ExchangeError.invalid("Pending feedback references an absent record.") }

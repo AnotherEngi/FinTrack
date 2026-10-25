@@ -1,5 +1,35 @@
 # Exchange and backup hardening pass
 
+## Latest iPad-feedback follow-up
+
+All **77** portable tests pass; **14** Apple source/test files parse. There are
+**25** authored Apple persistence tests awaiting Mac execution. Twelve portable
+and four Apple tests are new for this follow-up. Prior counts below are historical.
+
+- Colored all populated classification values while preserving unknown legacy
+  authorship; new synthetic fixtures identify their simulated assistant origin.
+- Separated discussion answers from actual category/tag edits, preserving older
+  response files/canonical bytes and matching acknowledgements without financial
+  edits. Incoming IDs/revisions/text and backup discussion references validate.
+- Added durable reply drafts/messages and explicit resolution without approval;
+  drafts remain discoverable after relaunch yet never enter review files. Frozen
+  revision guards preserve stale reply text. Failed commits retain drafts and do
+  not save half a conversation. Later messages reopen resolved discussions; new
+  unrelated classification proposals do not. Late older replies do not replace
+  a newer question's direction. Cache decoded threads once on ledger reload.
+- Prepared exports lock their choices and identify mode; imported replies and
+  backup tools use separate pages. Manual backup export opens the Files dialog
+  immediately, independent of iCloud setup. Cancel is not shown as an error.
+- Exact signed spending charts reuse tested finance totals, separate pending,
+  preserve negative refunds, break missing-month lines, and provide drilldowns.
+  Opt-in multi-year fixtures append by stable IDs without replacing edits.
+
+SwiftUI/Charts/FileDocument and SwiftData **semantic compilation and actual device
+behavior remain unverified here**. See [current flow](review-flow.md) and the
+[combined test](ipad-acceptance.md); syntax parsing is not a Mac build substitute.
+
+## Earlier exchange/backup hardening
+
 2026-10-24. Source review and Windows verification completed after implementing
 the new review/intake/backup flows. This is not an Apple build or cloud test.
 

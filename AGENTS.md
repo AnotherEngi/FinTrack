@@ -110,6 +110,26 @@ does not change the requirement to keep financial data and credentials private.
 
 ## Implementation guidance
 
+- Latest iPad feedback: all populated category/tag values have colored review
+  pills, including older unknown provenance (orange needs review; keep stored
+  origin unknown). Blue is user-edited and green approved. The earlier neutral
+  fallback is superseded. Never rewrite old example records to repair their UI.
+- The user confirmed separating discussion answers from category/tag proposals.
+  Answers are readable with Reply/Mark Resolved; only actual record changes use
+  Apply changes/Keep current. Import records matching acknowledgements, never
+  approvals or automatic financial edits. Preserve legacy response compatibility.
+  Discussions replaces Questions, with a thin question column beside activity.
+  Reply drafts/messages/closure are optional V3 workspace fields, backed up.
+- Send, Import, and Backup are separate review pages. Lock preparation choices
+  after creating a file; label its mode and require Start Another Review to
+  prepare another. Manual full backup export opens a Files save dialog and does
+  not depend on automatic cloud-backup configuration.
+- Overview must lead with category spending, monthly trends, and year comparisons,
+  as explicitly selected by the user. Use exact amounts, separate pending, leave
+  missing periods unknown, and provide transaction drilldowns. See
+  [current flow](docs/review-flow.md); the old HTML preview is historical for these
+  additions. Native chart/file-provider UI still needs Mac/iPad validation.
+
 - The user clarified the four data flows on 2026-10-24: their existing ChatGPT
   task retrieves card transactions weekly; FinTrack needs intake, durable app
   feedback, and recoverable classification knowledge around the accepted ledger.
@@ -167,10 +187,10 @@ does not change the requirement to keep financial data and credentials private.
 
 ## Validation and environment
 
-- Current review/backup batch: all **65** portable tests pass on Windows Swift
+- Current review/backup/discussion/chart batch: all **77** portable tests pass on Windows Swift
   6.4.1. Hardening results are recorded
-  in docs/device-verification.md. Twelve Apple source/test files pass Windows
-  syntax parsing only. There are 21 Apple persistence tests (nine new); run them
+  in docs/device-verification.md. Fourteen Apple source/test files pass Windows
+  syntax parsing only. There are 25 Apple persistence tests (four new in this UX follow-up); run them
   and the Xcode build on Mac. Verify iCloud permission, metadata confirmation,
   retries, and full restore on iPad before real data. The older test counts below
   are historical evidence, not validation of schema V3 or cloud backup.
@@ -244,7 +264,7 @@ does not change the requirement to keep financial data and credentials private.
 - Source labels are local aliases with UUIDs, not bank account numbers or a bank
   import identity system. Category/tag provenance is retained through approval;
   manual classification changes update only the affected origins. Older unknown
-  origins remain neutral. Session markers register successful distinct writes,
+  origins retain unknown metadata but use orange needs-review pills. Session markers register successful distinct writes,
   survive backgrounding/reload, and clear on a new app process. Discussion progress
   is explicitly user-marked; never infer it from export or foreground changes.
 - Opt-in table examples use a separate stable UUID namespace and append only

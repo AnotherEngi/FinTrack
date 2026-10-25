@@ -31,7 +31,8 @@ public enum SyntheticTransactions {
                     assistantContext: item == 0 ? AssistantContext(
                         question: "Was this for groceries or household supplies?",
                         reason: "A fictional suggestion to exercise review.",
-                        ledgerNotes: "Synthetic earlier ledger history") : .init())
+                        ledgerNotes: "Synthetic earlier ledger history") : .init(),
+                    classificationProvenance: .init(category: categoryID == nil ? .unknown : .assistant))
                 if item == 1 || isRefund {
                     // A fictional explicit approval, not approval inferred from a category.
                     let operationID = UUID(uuidString: String(format:

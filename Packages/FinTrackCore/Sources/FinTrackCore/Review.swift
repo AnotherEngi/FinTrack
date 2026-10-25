@@ -78,7 +78,7 @@ public struct ReviewCatalog: Sendable {
 }
 
 public enum ReviewAction: String, Codable, CaseIterable, Sendable {
-    case approve, discuss, reopen, skip, markDiscussionInProgress
+    case approve, discuss, reopen, skip, markDiscussionInProgress, resolveDiscussion
 }
 
 public struct ReviewRequest: Codable, Equatable, Identifiable, Sendable {

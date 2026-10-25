@@ -67,6 +67,9 @@ public struct SpendingBucket: Identifiable, Sendable {
     public let label: String
     public let recordIDs: [UUID]
     public let totals: SpendingTotals
+    public init(id: String, label: String, recordIDs: [UUID], totals: SpendingTotals) {
+        self.id = id; self.label = label; self.recordIDs = recordIDs; self.totals = totals
+    }
 }
 
 /// Summarizes only stored, selected records. No missing periods are zero-filled.

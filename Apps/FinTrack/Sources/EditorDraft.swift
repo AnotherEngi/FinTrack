@@ -78,6 +78,7 @@ extension ReviewAction {
         case .reopen: "Reopen"
         case .skip: "Skip"
         case .markDiscussionInProgress: "Mark reviewing in ChatGPT"
+        case .resolveDiscussion: "Resolve discussion"
         }
     }
 }

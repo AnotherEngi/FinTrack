@@ -7,6 +7,17 @@ classification guidance, user-selected-folder automatic iCloud backup, and full
 backup export/restore. Schema V3 migration and these native flows await Mac/iPad
 validation. No cloud record sync or LLM API requests.
 Updated 2026-10-24.
+
+Latest iPad feedback changes: see [discussion and spending flow](review-flow.md).
+The user confirmed separate replies versus financial edits, and category/month/
+year charts. All populated categories/tags now have pills, including orange for
+unapproved unknown-origin older data without altering provenance. Discussions
+replaces Questions; replies/resolution/drafts are durable, with a question column
+in Transactions. Send/Import/Backup pages are separate, prepared files lock and
+identify their mode, and manual full-backup export opens Files independently.
+Import records matching acknowledgements automatically; only actual record
+changes offer Apply changes/Keep current. Current verification: 77 portable tests
+pass; 14 Apple files parse, 25 Apple persistence tests await Mac execution.
 Confirmed constraints below come from the user. Proposed designs remain open until
 selected; documentation verification does not establish account or device access.
 
@@ -433,7 +444,7 @@ export/confirmed restore is supplementary; restore preserves a local recovery co
 Backups include drafts and exchange state, but no permission bookmarks/credentials.
 
 See [review/backup guide](chatgpt-export.md), [combined device test](ipad-acceptance.md),
-and [hardening report](hardening.md). All 65 portable tests pass on Windows; 21
+and [hardening report](hardening.md). All 77 portable tests pass on Windows; 25
 Apple persistence tests and the app build/upload/restore await Mac/iPad validation.
 The 50 MB file limit fails visibly without truncation. Full taxonomy, splits,
 reimbursements, automatic cloud transport to ChatGPT, and real-history migration

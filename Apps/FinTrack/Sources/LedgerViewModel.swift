@@ -14,6 +14,7 @@ final class LedgerViewModel {
     private(set) var startupFailure: String?
     private(set) var sessionChanges = SessionChanges()
     private(set) var workspace = ReviewWorkspace()
+    private(set) var discussions: [UUID: DiscussionThread] = [:]
     private(set) var backup: CloudBackup?
     var message: String?
 
@@ -40,10 +41,13 @@ final class LedgerViewModel {
     func reload() {
         guard let repository, let draftStore else { return }
         do {
-            records = try repository.fetchAll()
-            drafts = try draftStore.fetchAll()
-            workspace = try repository.workspace()
-            backup?.schedule(try repository.backup())
+            let savedRecords = try repository.fetchAll()
+            let savedDrafts = try draftStore.fetchAll()
+            let savedWorkspace = try repository.workspace()
+            let savedDiscussions = savedWorkspace.discussions(in: savedRecords)
+            records = savedRecords; drafts = savedDrafts; workspace = savedWorkspace
+            discussions = Dictionary(uniqueKeysWithValues: savedDiscussions.map { ($0.id, $0) })
+            backup?.schedule(FullBackup(records: savedRecords, workspace: savedWorkspace))
         } catch {
             message = "Unable to read saved data: \(error.localizedDescription)"
         }
@@ -64,6 +68,15 @@ final class LedgerViewModel {
             reload()
             message = count == 0 ? "Table examples already exist. Your edits were preserved."
                 : "Added \(count) fictional table examples. Existing records were preserved."
+        } catch { message = error.localizedDescription }
+    }
+
+    func loadSpendingSamples() {
+        do {
+            guard let repository else { throw LedgerError.recordNotFound }
+            let count = try repository.addSyntheticSpendingExamples(asOf: TransactionDate(EditorDraft.dateText(.now)))
+            reload()
+            message = "Added \(count) fictional chart transactions. Existing records and edits were preserved."
         } catch { message = error.localizedDescription }
     }
 
@@ -121,6 +134,24 @@ final class LedgerViewModel {
     func acknowledge(_ id: UUID) throws {
         guard let repository else { throw LedgerError.recordNotFound }
         try repository.acknowledgeResponse(fileID: id); reload()
+    }
+
+    func reply(recordID: UUID, expectedRevision: Int64, text: String) throws {
+        guard let repository else { throw LedgerError.recordNotFound }
+        try repository.replyToDiscussion(recordID: recordID, expectedRevision: expectedRevision, text: text)
+        reload()
+    }
+
+    func resolveDiscussion(_ record: LedgerTransaction) throws {
+        guard let repository else { throw LedgerError.recordNotFound }
+        try repository.resolveDiscussion(recordID: record.id, expectedRevision: record.revision)
+        reload()
+    }
+
+    func saveDiscussionDraft(recordID: UUID, expectedRevision: Int64, text: String) throws {
+        guard let repository else { throw LedgerError.recordNotFound }
+        try repository.saveDiscussionDraft(recordID: recordID, expectedRevision: expectedRevision, text: text)
+        reload()
     }
 
     func decide(fileID: UUID, proposalID: UUID, accept: Bool) throws {

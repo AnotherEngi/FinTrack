@@ -1,5 +1,13 @@
 # ChatGPT review, weekly intake, and automatic iCloud backup
 
+Latest controls and semantics: see [discussion and spending flow](review-flow.md).
+Review & backup separates **Send to ChatGPT**, **Import reply**, and **Backup**.
+Prepared review buttons lock until Start Another Review, and the heading names
+the selected mode. Discussion answers are read/replied to/resolved without
+acceptance; only actual category/tag changes offer Apply changes/Keep current.
+Importing records matched processing acknowledgements automatically. Manual full
+backup export now opens a Files save dialog and requires no iCloud folder setup.
+
 Current source batch: 2026-10-24. Synthetic development data only. Mac build,
 SwiftData migration tests, and physical-iPad handoff/upload/restore need validation.
 This guide replaces the former selected-range JSON/CSV/three-file export steps.
@@ -12,14 +20,15 @@ This guide replaces the former selected-range JSON/CSV/three-file export steps.
    unanswered questions, relevant committed records, and classification guidance.
    Notes and answers are included; unfinished raw drafts are excluded. The first
    packet establishes existing records as a baseline. Table filters do not limit it.
-3. Optionally inspect the preview. Use **Share or Save File** and attach the one
+3. Optionally inspect the preview. Use **Share Prepared Review** and attach the one
    JSON file in your chosen ChatGPT finance conversation. Instructions and a return
    template are embedded; there are no routine date/record/context choices.
 4. Ask ChatGPT to follow the embedded instructions and return one JSON file. Save
-   that result and use **Import ChatGPT or Weekly File** in FinTrack.
-5. Open the incoming response. **Record Processing Receipt** removes only the
-   acknowledged operation IDs; newer edits remain pending. Accept/reject individual
-   suggestions separately. Newer records/guidance block stale acceptance.
+   that result and use **Import ChatGPT Reply or Weekly File** in FinTrack.
+5. Open the incoming response. Import has recorded only its acknowledged operation
+   IDs; newer edits remain pending. Read discussion replies directly; Apply changes/
+   Keep current is only for proposed value edits. Newer records/guidance block stale
+   changes. Use Discussions to save a reply for the next review or mark it resolved.
 
 Preparing/sharing a file is not receipt or approval. Open discussions remain
 eligible for the next review even after their operations were acknowledged.
@@ -101,7 +110,9 @@ No guarantee of uploads while force-quit or of a fixed background schedule is ma
 
 ## Supplementary full export/restore
 
-**Export Full Backup** creates a private full snapshot; share/save that file.
+**Export Full Backup** opens Files to save a private full snapshot directly. It is
+independent of the automatic backup folder. Discussion reply drafts, user messages,
+and resolution history are included along with the other workspace state.
 **Restore Full Backup** opens either an automatic cloud backup file or a manual
 export, validates it, and asks before replacing current state. One local
 `Application Support/FinTrack/BeforeRestore.json` preserves the pre-restore state;

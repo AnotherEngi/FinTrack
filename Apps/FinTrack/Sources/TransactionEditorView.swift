@@ -13,6 +13,7 @@ struct TransactionEditorView: View {
     @State private var needsRetry = false
     @State private var draftWriteFailed = false
     @State private var pendingRequest: ReviewRequest?
+    @State private var showDiscussion = false
     @FocusState private var noteFocused: Bool
 
     init(ledger: LedgerViewModel, draft: EditorDraft, startDiscussion: Bool = false,
@@ -92,6 +93,12 @@ struct TransactionEditorView: View {
                         }
                     }
                     reviewActions(record)
+                    if let thread = ledger.discussions[record.id] {
+                        Section("Discussion") {
+                            Text(thread.status.label)
+                            Button("Read Replies / Continue Discussion", systemImage: "questionmark.bubble") { showDiscussion = true }
+                        }
+                    }
                     if !record.reviewHistory.isEmpty {
                         Section("Review History") {
                             ForEach(record.reviewHistory.reversed()) { entry in
@@ -125,6 +132,7 @@ struct TransactionEditorView: View {
             .onChange(of: draft.input) { _, _ in pendingRequest = nil; saveChangedInput() }
             .task { if startDiscussion { noteFocused = true } }
             .interactiveDismissDisabled(draftWriteFailed)
+            .sheet(isPresented: $showDiscussion) { DiscussionDetailView(ledger: ledger, recordID: draft.id) }
             .confirmationDialog("Discard unsaved input? Previously saved edits will remain.",
                                 isPresented: $discardConfirmation, titleVisibility: .visible) {
                 Button("Discard Unsaved Draft", role: .destructive) {
@@ -145,7 +153,7 @@ struct TransactionEditorView: View {
                 if record.discussionProgress != .reviewingInChatGPT {
                     Button("Mark Reviewing in ChatGPT") { perform(.markDiscussionInProgress) }.disabled(needsRetry)
                 }
-                Text("This tracks your own workflow. FinTrack cannot see whether ChatGPT received or processed a file.")
+                Text("Imported replies appear in Discussions. Saving or sharing a review alone does not prove ChatGPT received it.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             let approvalReason = record.reviewBlockReason(for: .approve, catalog: ledger.catalog)

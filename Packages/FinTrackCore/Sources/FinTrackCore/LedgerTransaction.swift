@@ -210,7 +210,7 @@ public struct LedgerTransaction: Codable, Equatable, Identifiable, Sendable {
     }
 
     private func checkReviewAction(_ action: ReviewAction, catalog: ReviewCatalog) throws {
-        if action == .skip { return }
+        if action == .skip || action == .resolveDiscussion { return }
         guard !draft.treatment.excludedFromReview else { throw ReviewError.excludedTreatment }
         if action == .markDiscussionInProgress && !discussionRequested { throw ReviewError.discussionNotRequested }
         if action == .approve {

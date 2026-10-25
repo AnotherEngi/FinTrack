@@ -1,11 +1,14 @@
 # Transaction treatments and review workflow
 
-Latest extension: the new review/backup batch has **65** passing portable tests.
+Latest extension: the new review/backup/discussion/chart batch has **77** passing portable tests.
 Durable feedback, returned receipts/proposals, narrow weekly source-ID intake,
 guidance versions, and full-history review are implemented in source. Review
 actions remain explicitly user-owned. See [current guide](chatgpt-export.md) and
 [hardening](hardening.md); older integration-status notes below are historical.
-The current 21-test Apple suite and native/device flows still need validation.
+The current 25-test Apple suite and native/device flows still need validation.
+See [discussion flow](review-flow.md): replies have no acceptance step; only actual
+category/tag edits use Apply changes/Keep current. Resolve discussion is a saved
+explicit action that preserves transaction approval.
 
 Implemented in source on 2026-10-24. All 50 portable Swift tests pass on Windows.
 The user now reports a successful native build and physical-iPad refund edit/

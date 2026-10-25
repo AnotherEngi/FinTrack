@@ -4,6 +4,14 @@ Updated 2026-10-24. All device checks use synthetic transactions.
 
 ## Current review/intake/backup batch
 
+Latest UX follow-up: the user reports uncolored unapproved fields, confusing
+question/suggestion semantics, prepared-file ambiguity, apparent backup-export
+no-op, and missing spending visualizations in the running iPad app. They selected
+separate discussions versus record edits and category/month/year charts. This is
+evidence that an earlier native build/import screen runs; no current 25-test Mac
+suite pass or actual cloud backup/restore result has been reported.
+New controls/flows are documented in [review-flow.md](review-flow.md).
+
 This section supersedes implementation status/counts in the earlier table below.
 The previous three-file export was never tested on iPad and has been replaced.
 
@@ -16,11 +24,11 @@ packages/app have not yet been rerun/reported. Preserve the existing store.
 
 | Check | Result | Evidence / required next step |
 | --- | --- | --- |
-| Portable rules and regression suite | Pass, agent executed | All 65 Swift Testing tests pass on Windows Swift 6.4.1, including 15 new exchange/backup/editor/freshness cases |
-| Apple source syntax | Pass, agent executed | All 12 app/persistence source/test files parse; no Apple SDK types/macros checked |
-| Xcode project references / scheme | Pass, static only | Unique/defined object IDs, all eight app sources referenced, scheme XML valid; Mac plutil/build still needed |
+| Portable rules and regression suite | Pass, agent executed | All 77 Swift Testing tests pass on Windows Swift 6.4.1; 12 new discussion/color/chart/privacy/compatibility tests in this follow-up |
+| Apple source syntax | Pass, agent executed | All 14 app/persistence source/test files parse; no Apple SDK types/macros checked |
+| Xcode project references / scheme | Pass, static only | Unique/defined object IDs, all ten app sources referenced, scheme XML valid; Mac plutil/build still needed |
 | Synthetic weekly fixture / whitespace | Pass, agent executed | JSON parsed, diff check clean; no financial accounts/files used |
-| Mac persistence suite / schema V3 | Pending | 21 authored tests, nine new; existing-store and raw-draft migration need Mac execution |
+| Mac persistence suite / schema V3 | Pending | 25 authored tests, four new discussion/draft/receipt/fixture tests; migration and native integration need Mac execution |
 | Automatic packet / ChatGPT round trip | Implemented in source, pending device check | One file, pending/open context, full history, returned receipt/proposals, explicit acceptance and stale/replay protection |
 | Weekly source intake / guidance | Implemented in source, pending native check | Atomic new-row batches, genuine scoped IDs, explicit reconciliation, guidance edits and version conflicts |
 | Automatic iCloud backup | Implemented in source, unverified on device | One-time folder permission, durable candidate/retries, uploaded metadata confirmation; independently inspect cloud contents |

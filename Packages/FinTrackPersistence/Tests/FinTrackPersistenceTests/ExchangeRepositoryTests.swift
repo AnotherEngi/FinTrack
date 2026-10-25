@@ -7,6 +7,85 @@ import FinTrackCore
 private enum ExchangeWriteFailure: Error { case disk }
 
 @MainActor
+@Test func discussionReplyDraftReopensAndReplyAndResolutionPreserveApproval() throws {
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let url = directory.appendingPathComponent("test.store")
+    let repository = try LocalTransactionRepository(storeURL: url)
+    let original = try SyntheticTransactions.make()[0]
+    try repository.insert(original)
+    let approved = try repository.perform(ReviewRequest(transactionID: original.id, expectedRevision: original.revision, action: .approve))
+    try repository.saveDiscussionDraft(recordID: original.id, expectedRevision: approved.revision, text: "Fictional reply in progress")
+    let reopened = try LocalTransactionRepository(storeURL: url)
+    #expect(try reopened.workspace().discussionDrafts?[original.id.uuidString]?.text == "Fictional reply in progress")
+    try reopened.replyToDiscussion(recordID: original.id, expectedRevision: approved.revision, text: "Fictional household supplies")
+    let replied = try #require(reopened.fetchAll().first)
+    #expect(replied.approval == .confirmed)
+    #expect(try reopened.workspace().discussionDrafts?[original.id.uuidString] == nil)
+    #expect(try reopened.workspace().discussionReplies?.count == 1)
+    try reopened.resolveDiscussion(recordID: replied.id, expectedRevision: replied.revision)
+    let resolved = try #require(reopened.fetchAll().first)
+    #expect(resolved.approval == .confirmed)
+    #expect(try reopened.workspace().discussion(for: resolved)?.isResolved == true)
+}
+
+@MainActor
+@Test func failedDiscussionReplyPreservesDraftAndDoesNotAppendHalfAConversation() throws {
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    var fail = false
+    let repository = try LocalTransactionRepository(storeURL: directory.appendingPathComponent("test.store"), commit: { context in
+        if fail { throw ExchangeWriteFailure.disk }; try context.save()
+    })
+    let record = try SyntheticTransactions.make()[0]
+    try repository.insert(record)
+    try repository.saveDiscussionDraft(recordID: record.id, expectedRevision: record.revision, text: "Fictional draft")
+    fail = true
+    #expect(throws: ExchangeWriteFailure.self) {
+        try repository.replyToDiscussion(recordID: record.id, expectedRevision: record.revision, text: "Fictional draft")
+    }
+    #expect(try repository.fetchAll().first == record)
+    #expect(try repository.workspace().discussionReplies == nil)
+    #expect(try repository.workspace().discussionDrafts?[record.id.uuidString]?.text == "Fictional draft")
+}
+
+@MainActor
+@Test func importedAnswerAcknowledgesOnlyItsPacketWithoutApplyingClassification() throws {
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let repository = try LocalTransactionRepository(storeURL: directory.appendingPathComponent("test.store"))
+    let record = try SyntheticTransactions.make()[0]
+    try repository.insert(record)
+    let packet = try repository.prepareReview(mode: .pending)
+    var value = record.draft; value.notes = "Fictional newer edit"
+    let newer = try repository.update(id: record.id, expectedRevision: record.revision, draft: value)
+    let answer = DiscussionAnswer(recordID: record.id, expectedRevision: String(record.revision), text: "Fictional answer")
+    let response = ReviewResponse(packetID: packet.manifest.id, knowledgeVersion: packet.manifest.knowledgeVersion,
+        acknowledgedOperationIDs: packet.manifest.operationIDs, answers: [answer])
+    try repository.stageIncoming(ExchangeJSON.encode(response))
+    try repository.stageIncoming(ExchangeJSON.encode(response))
+    #expect(try repository.fetchAll().first == newer)
+    #expect(try repository.workspace().processedFiles == [response.id])
+    #expect(try repository.workspace().pending.count == 1)
+    #expect(try repository.workspace().discussion(for: newer)?.answers == [answer])
+}
+
+@MainActor
+@Test func chartExamplesAppendWithoutReplacingExistingEdits() throws {
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let repository = try LocalTransactionRepository(storeURL: directory.appendingPathComponent("test.store"))
+    let today = try TransactionDate("2026-10-24")
+    #expect(try repository.addSyntheticSpendingExamples(asOf: today) == 66)
+    let first = try #require(repository.fetchAll().first)
+    var draft = first.draft; draft.notes = "Fictional saved edit"
+    let edited = try repository.update(id: first.id, expectedRevision: first.revision, draft: draft)
+    #expect(try repository.addSyntheticSpendingExamples(asOf: today) == 0)
+    #expect(try repository.fetchAll().first(where: { $0.id == first.id }) == edited)
+    #expect(try repository.fetchAll().count == 66)
+}
+
+@MainActor
 @Test func ledgerAndFeedbackCommitOrRollbackTogetherIncludingDrafts() throws {
     let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: directory) }

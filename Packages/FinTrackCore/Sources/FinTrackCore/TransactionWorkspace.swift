@@ -43,7 +43,7 @@ public enum WorkspacePeriod: String, CaseIterable, Sendable {
 }
 
 public enum TransactionSortColumn: String, CaseIterable, Sendable {
-    case activity, date, amount, merchant, source, category, tags, review
+    case activity, question, date, amount, merchant, source, category, tags, review
 }
 
 public struct TransactionTableSort: Sendable {
@@ -56,7 +56,7 @@ public struct TransactionTableSort: Sendable {
     }
 
     public func records(_ records: [LedgerTransaction], catalog: ReviewCatalog,
-                        changedIDs: Set<UUID> = []) -> [LedgerTransaction] {
+                        changedIDs: Set<UUID> = [], questionIDs: Set<UUID> = []) -> [LedgerTransaction] {
         records.sorted { a, b in
             let order: ComparisonResult
             switch column {
@@ -69,6 +69,7 @@ public struct TransactionTableSort: Sendable {
             case .tags: order = Self.text(a.draft.tags.sorted().joined(separator: ";"), b.draft.tags.sorted().joined(separator: ";"))
             case .review: order = Self.compare(Self.reviewScore(a), Self.reviewScore(b))
             case .activity: order = Self.compare(Self.activityScore(a, changedIDs), Self.activityScore(b, changedIDs))
+            case .question: order = Self.compare(questionIDs.contains(a.id) ? 1 : 0, questionIDs.contains(b.id) ? 1 : 0)
             }
             if order == .orderedSame { return a.id.uuidString < b.id.uuidString }
             return ascending ? order == .orderedAscending : order == .orderedDescending

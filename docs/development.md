@@ -4,13 +4,18 @@ Updated 2026-10-24. Use synthetic data throughout development.
 
 ## Latest review/intake/backup batch
 
-Current verification: **65 portable tests pass** on Windows Swift 6.4.1; all 12
-Apple source/test files pass syntax-only parsing. There are **21** authored Apple
-persistence tests, nine new. Windows has not typechecked SwiftUI/SwiftData or
+Current verification: **77 portable tests pass** on Windows Swift 6.4.1; all 14
+Apple source/test files pass syntax-only parsing. There are **25** authored Apple
+persistence tests, four new in the discussion/chart follow-up. Windows has not typechecked SwiftUI/Charts/SwiftData or
 validated iCloud folder permission, migration, upload confirmation, or restore.
 See [hardening](hardening.md), [current guide](chatgpt-export.md), and the
 [combined acceptance session](ipad-acceptance.md). Historical counts below refer
 to earlier iterations, not this batch.
+
+See [discussion and chart changes](review-flow.md). Xcode now references ten app
+source files. Swift Charts is an Apple framework dependency, not an installed
+third-party package. No signing/capability changes are added. Workspace metadata
+is additive/optional; the new resolveDiscussion action requires the new app binary.
 
 Schema V3 reuses the frozen V2 transaction model and adds one persistent workspace
 for pending feedback, packets/results, source links, guidance, and raw drafts.

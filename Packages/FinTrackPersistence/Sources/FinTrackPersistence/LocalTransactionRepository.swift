@@ -175,6 +175,22 @@ public final class LocalTransactionRepository: TransactionRepository {
         return try context.fetch(descriptor).first
     }
 
+    @discardableResult
+    public func addSyntheticSpendingExamples(asOf date: TransactionDate) throws -> Int {
+        let old = try fetchAll()
+        let ids = Set(old.map(\.id))
+        let additions = try SyntheticSpendingExamples.make(asOf: date).filter { !ids.contains($0.id) }
+        guard !additions.isEmpty else { return 0 }
+        var workspace = try self.workspace()
+        workspace.establishBaseline(records: old)
+        for record in additions { workspace.pending.append(FeedbackEvent(before: nil, after: record, kind: "synthetic-example")) }
+        try committing {
+            for record in additions { context.insert(try Row(record)) }
+            try writeWorkspace(workspace)
+        }
+        return additions.count
+    }
+
     private func committing(_ changes: () throws -> Void) throws {
         do {
             try changes()
@@ -230,8 +246,11 @@ public final class LocalTransactionRepository: TransactionRepository {
     public func stageIncoming(_ data: Data) throws {
         var workspace = try self.workspace()
         let count = workspace.staged.count
-        try workspace.stage(data)
-        if count != workspace.staged.count { try committing { try writeWorkspace(workspace) } }
+        let processed = workspace.processedFiles.count
+        try workspace.receive(data)
+        if count != workspace.staged.count || processed != workspace.processedFiles.count {
+            try committing { try writeWorkspace(workspace) }
+        }
     }
 
     public func acknowledgeResponse(fileID: UUID) throws {
@@ -286,6 +305,58 @@ public final class LocalTransactionRepository: TransactionRepository {
         workspace.knowledge = rules; workspace.knowledgeVersion = UUID()
         workspace.knowledgeResponseID = nil
         workspace.pending.append(FeedbackEvent(kind: "knowledge-edit", detail: "User updated classification guidance."))
+        try committing { try writeWorkspace(workspace) }
+    }
+
+    public func replyToDiscussion(recordID: UUID, expectedRevision: Int64, text: String) throws {
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, text.count <= 10_000 else {
+            throw ExchangeError.invalid("Enter a reply of up to 10,000 characters.")
+        }
+        var workspace = try self.workspace()
+        guard workspace.drafts[recordID.uuidString] == nil else { throw LedgerError.unfinishedDraft }
+        guard let stored = try row(id: recordID) else { throw LedgerError.recordNotFound }
+        let before = try stored.value()
+        var draft = before.draft; draft.answer = text
+        var saved = try before.revising(with: draft, expectedRevision: expectedRevision)
+        if !saved.draft.treatment.excludedFromReview {
+            saved = try saved.applying(ReviewRequest(transactionID: recordID, expectedRevision: saved.revision,
+                action: .discuss), catalog: catalog)
+        }
+        let reply = UserDiscussionReply(recordID: recordID, sentRevision: String(saved.revision), text: text,
+            respondingTo: workspace.discussion(for: before)?.answers.last?.id)
+        if workspace.discussionReplies == nil { workspace.discussionReplies = [] }
+        workspace.discussionReplies?.append(reply)
+        workspace.discussionDrafts?.removeValue(forKey: recordID.uuidString)
+        workspace.recordUserChange(before: before, after: saved, kind: "discussion-reply")
+        try committing { try stored.apply(saved); try writeWorkspace(workspace) }
+    }
+
+    public func resolveDiscussion(recordID: UUID, expectedRevision: Int64) throws {
+        var workspace = try self.workspace()
+        guard workspace.drafts[recordID.uuidString] == nil else { throw LedgerError.unfinishedDraft }
+        guard workspace.discussionDrafts?[recordID.uuidString] == nil else { throw LedgerError.unfinishedDraft }
+        guard let stored = try row(id: recordID) else { throw LedgerError.recordNotFound }
+        let before = try stored.value()
+        guard before.revision == expectedRevision else { throw LedgerError.staleRevision }
+        guard workspace.discussion(for: before) != nil else { throw ExchangeError.invalid("This transaction has no discussion to resolve.") }
+        if workspace.discussion(for: before)?.isResolved == true { return }
+        let saved = try before.applying(ReviewRequest(transactionID: recordID, expectedRevision: expectedRevision,
+            action: .resolveDiscussion), catalog: catalog)
+        workspace.resolveDiscussion(for: saved)
+        workspace.recordUserChange(before: before, after: saved, kind: "resolveDiscussion")
+        try committing { try stored.apply(saved); try writeWorkspace(workspace) }
+    }
+
+    public func saveDiscussionDraft(recordID: UUID, expectedRevision: Int64, text: String) throws {
+        guard text.count <= 10_000, expectedRevision > 0 else {
+            throw ExchangeError.invalid("Use a reply of up to 10,000 characters.")
+        }
+        guard try row(id: recordID) != nil else { throw LedgerError.recordNotFound }
+        var workspace = try self.workspace()
+        let value = text.isEmpty ? nil : DiscussionDraft(recordID: recordID, expectedRevision: String(expectedRevision), text: text)
+        guard workspace.discussionDrafts?[recordID.uuidString] != value else { return }
+        if workspace.discussionDrafts == nil { workspace.discussionDrafts = [:] }
+        workspace.discussionDrafts?[recordID.uuidString] = value
         try committing { try writeWorkspace(workspace) }
     }
 

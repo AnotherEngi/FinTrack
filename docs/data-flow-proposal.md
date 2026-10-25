@@ -4,10 +4,15 @@
 request. Current source replaces routine selected-range export with automatic
 pending-work/full-history packets, staged results/weekly intake, explicit proposals
 and receipts, editable guidance, automatic iCloud folder backup, and full restore.
-All 65 portable tests pass; Apple build, V3 migration, and cloud/device behavior
+All 77 portable tests pass; Apple build, V3 migration, and cloud/device behavior
 await validation. See [current guide](chatgpt-export.md), [hardening](hardening.md),
 and [combined acceptance](ipad-acceptance.md). The design rationale below remains;
 its initial-state table is historical, not the present implementation status.
+
+Latest UX/contracts: [review-flow.md](review-flow.md) supersedes generic per-proposal
+acceptance for discussion replies. Only actual value edits require a decision;
+import records matching acknowledgements, while replies/closure/drafts stay
+durable and backup-eligible. Prepared files are explicitly frozen by review mode.
 
 ## Confirmed workflow
 

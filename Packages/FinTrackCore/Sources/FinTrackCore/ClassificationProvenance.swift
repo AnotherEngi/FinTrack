@@ -16,6 +16,17 @@ public enum ValueOrigin: String, Codable, Sendable {
     case unknown, user, assistant
 }
 
+/// Every populated classification has a review color, even when an older
+/// record lacks provenance. A review color never invents an author.
+public enum ClassificationStatus: Sendable {
+    case needsReview, userEdit, approved
+    public init(approval: ApprovalStatus, origin: ValueOrigin) {
+        if approval == .confirmed { self = .approved }
+        else if origin == .user { self = .userEdit }
+        else { self = .needsReview }
+    }
+}
+
 public struct ClassificationProvenance: Codable, Equatable, Sendable {
     public let category: ValueOrigin
     public let tags: [String: ValueOrigin]

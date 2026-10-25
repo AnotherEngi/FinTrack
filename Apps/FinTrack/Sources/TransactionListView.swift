@@ -18,6 +18,7 @@ extension TransactionSortColumn {
     var label: String {
         switch self {
         case .activity: "Activity"
+        case .question: "Question"
         case .date: "Date"
         case .amount: "Amount"
         case .merchant: "Merchant"
@@ -30,7 +31,7 @@ extension TransactionSortColumn {
 
     var minimumWidth: CGFloat {
         switch self {
-        case .activity: 44
+        case .activity, .question: 44
         case .date: 80
         case .amount: 108
         case .merchant: 144
@@ -58,7 +59,7 @@ extension TransactionSortColumn {
     }
 
     var alignment: Alignment {
-        self == .activity ? .center : self == .amount ? .trailing : .leading
+        self == .activity || self == .question ? .center : self == .amount ? .trailing : .leading
     }
 }
 
@@ -78,8 +79,8 @@ private struct TransactionTableCell<Content: View>: View {
 
     var body: some View {
         content
-            .padding(.leading, column == .activity ? 0 : 8)
-            .padding(.trailing, column == .activity ? 0 : column == .amount ? 12 : 8)
+            .padding(.leading, column == .activity || column == .question ? 0 : 8)
+            .padding(.trailing, column == .activity || column == .question ? 0 : column == .amount ? 12 : 8)
             .frame(width: column.width(in: tableWidth), alignment: column.alignment)
     }
 }
@@ -96,6 +97,8 @@ struct TransactionListView: View {
     @State private var amalgamate = false
     @State private var sort = TransactionTableSort()
     @State private var showExport = false
+    @State private var reviewPage = ReviewPage.send
+    @State private var discussionRecord: LedgerTransaction?
     @State private var pendingRequest: ReviewRequest?
 
     private var range: TransactionDateRange? {
@@ -110,7 +113,8 @@ struct TransactionListView: View {
         let labels = Dictionary(uniqueKeysWithValues: ledger.catalog.categories.map { ($0.id, $0.label) })
         let records = LedgerSelection(from: range.from, through: range.through,
             search: search, categoryLabels: labels).records(in: ledger.records)
-        return sort.records(records, catalog: ledger.catalog, changedIDs: ledger.sessionChanges.recordIDs)
+        let questions = Set(ledger.discussions.values.filter { !$0.isResolved || $0.status == .draft }.map(\.recordID))
+        return sort.records(records, catalog: ledger.catalog, changedIDs: ledger.sessionChanges.recordIDs, questionIDs: questions)
     }
 
     var body: some View {
@@ -158,10 +162,14 @@ struct TransactionListView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
-                    Button { showExport = true } label: {
+                    Button { reviewPage = .send; showExport = true } label: {
                         Label("Review with ChatGPT", systemImage: "square.and.arrow.up").labelStyle(.titleAndIcon)
-                    }.accessibilityLabel("Export shown transactions for ChatGPT").help("Export shown transactions for ChatGPT")
-                        .disabled(visibleRecords.isEmpty)
+                    }.accessibilityLabel("Prepare review for ChatGPT").help("Prepare pending feedback or full history")
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    Button { reviewPage = .inbox; showExport = true } label: {
+                        Label("Import reply", systemImage: "square.and.arrow.down")
+                    }.accessibilityLabel("Import a ChatGPT reply or weekly transactions")
                 }
                 ToolbarItem(placement: .primaryAction) {
                     Button { startDiscussion = false; editor = .new() } label: { Image(systemName: "plus") }
@@ -189,7 +197,10 @@ struct TransactionListView: View {
                     .id(draft.id)
             }
             .sheet(isPresented: $showExport) {
-                ReviewExportView(ledger: ledger, showsDone: true)
+                ReviewExportView(ledger: ledger, showsDone: true, initialPage: reviewPage)
+            }
+            .sheet(item: $discussionRecord) { record in
+                DiscussionDetailView(ledger: ledger, recordID: record.id)
             }
         }
     }
@@ -262,7 +273,11 @@ struct TransactionListView: View {
                 TransactionTableRow(record: record, catalog: ledger.catalog, width: width,
                     changed: ledger.sessionChanges.recordIDs.contains(record.id),
                     hasDraft: ledger.drafts.contains { $0.id == record.id },
-                    onEdit: { discuss in startDiscussion = discuss; editor = ledger.editor(for: record) },
+                    thread: ledger.discussions[record.id],
+                    onEdit: { discuss in
+                        if discuss { discussionRecord = record }
+                        else { startDiscussion = false; editor = ledger.editor(for: record) }
+                    },
                     onReview: { action in perform(action, record: record) })
                 Divider()
             }
@@ -278,6 +293,7 @@ struct TransactionListView: View {
                             TransactionTableCell(column, tableWidth: width) {
                                 HStack(spacing: 3) {
                                     if column == .activity { Image(systemName: "circle.dotted") }
+                                    else if column == .question { Image(systemName: "questionmark.bubble") }
                                     else {
                                         Text(column.label)
                                         Image(systemName: sort.column == column
@@ -319,6 +335,7 @@ private struct TransactionTableRow: View {
     let width: CGFloat
     let changed: Bool
     let hasDraft: Bool
+    let thread: DiscussionThread?
     let onEdit: (Bool) -> Void
     let onReview: (ReviewAction) -> Void
 
@@ -331,16 +348,21 @@ private struct TransactionTableRow: View {
         var labels: [String] = []
         if changed { labels.append("Changed this session") }
         if hasDraft { labels.append("Unsaved draft") }
-        if record.discussionRequested {
-            labels.append(record.discussionProgress == .reviewingInChatGPT
-                ? "Reviewing in ChatGPT, marked by you" : "Discussion waiting for export")
-        }
         return labels.joined(separator: "; ")
     }
 
     var body: some View {
         HStack(alignment: .center, spacing: 0) {
             TransactionTableCell(.activity, tableWidth: width) { activity }
+            TransactionTableCell(.question, tableWidth: width) {
+                if let thread {
+                    Button { onEdit(true) } label: {
+                        Image(systemName: thread.status == .draft ? "square.and.pencil" : thread.isResolved ? "checkmark.bubble" : "questionmark.bubble")
+                            .foregroundStyle(thread.isResolved ? Color.secondary : Color.accentColor)
+                            .frame(width: 44, height: 44)
+                    }.buttonStyle(.plain).accessibilityLabel(thread.status.label).help(thread.status.label)
+                } else { Text("—").foregroundStyle(.secondary).accessibilityLabel("No discussion") }
+            }
             TransactionTableCell(.date, tableWidth: width) { date }
             TransactionTableCell(.amount, tableWidth: width) {
                 VStack(alignment: .trailing, spacing: 2) {
@@ -361,7 +383,9 @@ private struct TransactionTableRow: View {
                 if let categoryID = record.draft.categoryID {
                     pill(catalog.category(id: categoryID)?.label ?? categoryID,
                         origin: record.classificationProvenance.category)
-                } else { Text("—").foregroundStyle(.secondary).accessibilityLabel("Category unavailable") }
+                } else if record.draft.treatment.excludedFromReview {
+                    Text("—").foregroundStyle(.secondary).accessibilityLabel("Category unavailable")
+                } else { pill("Choose category", origin: .unknown) }
             }
             TransactionTableCell(.tags, tableWidth: width) {
                 VStack(alignment: .leading, spacing: 4) {
@@ -403,10 +427,6 @@ private struct TransactionTableRow: View {
                     HStack(spacing: 2) {
                         if changed { Image(systemName: "pencil").foregroundStyle(statusColor(.user)) }
                         if hasDraft { Image(systemName: "doc.badge.ellipsis").foregroundStyle(.secondary) }
-                        if record.discussionRequested {
-                            Image(systemName: record.discussionProgress == .reviewingInChatGPT ? "ellipsis.bubble" : "bubble.left")
-                                .foregroundStyle(statusColor(record.discussionProgress == .reviewingInChatGPT ? .user : .assistant))
-                        }
                     }.font(.system(size: 11)).frame(width: 44, height: 44)
                 }.buttonStyle(.plain).accessibilityLabel(activityLabel).help(activityLabel)
             }
@@ -415,13 +435,13 @@ private struct TransactionTableRow: View {
 
     private func pill(_ text: String, origin: ValueOrigin) -> some View {
         let approved = record.approval == .confirmed
-        let color = statusColor(origin, approved: approved)
-        let known = approved || origin != .unknown
+        let style = ClassificationStatus(approval: record.approval, origin: origin)
+        let color = statusColor(style == .userEdit ? .user : .assistant, approved: style == .approved)
         let status = approved ? "Approved" : origin == .assistant ? "AI suggestion, not approved"
-            : origin == .user ? "Your edit, not approved" : "Origin unknown"
+            : origin == .user ? "Your edit, not approved" : "Not approved; origin not recorded on this older record"
         return Text(text).font(.caption).lineLimit(3).padding(.horizontal, 8).padding(.vertical, 5)
-            .foregroundStyle(known ? color : .primary)
-            .background(known ? color.opacity(0.14) : Color.clear, in: Capsule())
+            .foregroundStyle(color)
+            .background(color.opacity(0.18), in: Capsule())
             .padding(.horizontal, 4)
             .accessibilityLabel(text + ", " + status).help(text + " — " + status)
     }
@@ -432,7 +452,7 @@ private struct TransactionTableRow: View {
         switch origin {
         case .assistant: return dark ? Color(red: 1, green: 0.81, blue: 0.58) : Color(red: 0.60, green: 0.33, blue: 0.08)
         case .user: return dark ? Color(red: 0.63, green: 0.78, blue: 1) : Color(red: 0.08, green: 0.35, blue: 0.68)
-        case .unknown: return .secondary
+        case .unknown: return dark ? Color(red: 1, green: 0.81, blue: 0.58) : Color(red: 0.60, green: 0.33, blue: 0.08)
         }
     }
 
