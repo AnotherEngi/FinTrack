@@ -43,6 +43,24 @@ user's exceptions/clarifications and takes precedence where they differ.
    in section 7 of the supplied document. Normal typed records, archival financial
    fields, migration audits and import-payload replay fingerprints remain app data;
    the original workbook is not a FinTrack-managed artifact.
+8. **The pre-release framework rebuild does not preserve obsolete development
+   formats.** Use one current financial model/store schema and one current
+   contract for each operation. Replace prototype decoders, schemas and
+   compatibility-only fixtures rather than carry them forward. Backup/restore
+   tests cover the current format; old-development-backup reading and schema
+   migration chains are not deliverables. Format identifiers can still reject
+   incompatible files clearly. No existing data is silently deleted or reset.
+9. **Ask before choosing preservation for a breaking architecture change.**
+   Explain the affected data/objects and ask what needs to survive before adding
+   multiple revisions, compatibility branches, adapters or migrations. A prior
+   answer for the same change is sufficient. The current pre-release decision
+   does not authorize silently choosing compatibility or reset for future changes.
+10. **Primary category and proportional refund choices.** Never create a Mixed
+    category. An unsplit purchase uses its primary category; the user chooses
+    additional categories and their dollar amounts. A proportional refund
+    allocation may be offered for explicit confirmation; no proposal is applied
+    automatically. The proposed calculation basis is remaining refundable
+    allocation balances with exact-cent rounding, to be specified in the contract.
 
 ## Next ChatGPT request
 
@@ -60,39 +78,52 @@ safe, revision checked and independently reconciled against the initial import.
 
 ## Implementation sequence (planned, not complete)
 
-1. Define the versioned financial structures and source mapping: category and
-   subcategory definitions, signed balanced allocations, complete lifecycle
-   versions, historical decisions, text ownership including unknown authorship,
-   typed relationships, reporting settings and explicit unknowns. Keep raw source
-   facts distinct from edits and current eligibility. Obtain the source audit to
-   expose differences; do not invent settings from its absence.
-2. Implement splits/subcategories throughout editing, filtering, review exchange
-   and allocation-based reporting. Count each parent once. Exclude superseded
-   versions from active totals while preserving their original facts and evidence.
-3. Implement benefit/program configuration and reimbursement/repayment allocation
-   accounting, including partial/combined receipts and cumulative bounds. Expected
-   reimbursement must not reduce spending. Keep gross spending, receipts and any
-   net-cost presentation distinguishable; do not invent eligibility or resets.
-4. Carry every supported field through persistence, migrations, archived source
-   fields, offline drafts, backup/restore, export and ChatGPT context. Version
-   incompatible contracts consistently; retain deliberate legacy read support.
-   Preserve user edits and validate entire relationship graphs before commit.
-5. Publish the revised main-history contract and dedicated deferred-refund
-   contract. Add complete per-row/column disposition, independent debit/credit/
-   spending/net/source/tab/treatment controls and explicit reporting differences.
-   Provide concrete previews and atomic/recoverable import paths, including
-   source-ID uncertainty, replay and stale-version handling.
-6. Demonstrate all eleven acceptance cases from the supplied framework with
-   synthetic fixtures, run all available portable/native checks, then validate a
-   complete backup/download/restore on iPad for that revision. Return the final
-   contract, supported-capability checklist and remaining limitations before the
-   user generates or imports real data.
+1. Define one coherent current financial model and draft contracts using the
+   requirements handoff and independently invented fixtures. Include categories/
+   subcategories/definitions, balanced allocations, financial lifecycle versions,
+   historical decisions, current discussions, typed relationships, reporting
+   settings and explicit unknowns. Separate permanent financial facts from
+   transient assistant content. The developer does not need private audits or
+   real records; actual source decisions stay with the user/finance workflow.
+2. Implement and test the accounting rules in FinTrackCore: primary-category
+   purchases and explicit splits, active/superseded eligibility, benefits and
+   partial/combined reimbursement receipts, refunds, and independent controls.
+   Preserve unknown periods/eligibility and require confirmation of proportional
+   refund proposals. Never fabricate received funds, source links or allocations.
+3. Persist the current model directly with one current store schema, current
+   drafts and one current backup/archive layout. Reuse useful operational code
+   for exact money, atomic saves, recovery and iCloud upload confirmation. Replace
+   obsolete prototype structures/readers instead of wrapping or migrating them.
+   Verify save failure, restart, rollback and current-format backup/restore. Any
+   actual reset of test state must be explicit, not a silent startup side effect.
+4. Connect editing, filters, reports and ChatGPT context to the current model.
+   Count parents once; keep gross spending, reimbursements and net cost distinct.
+   Preserve source evidence, note ownership, review state and source comparison
+   baselines. Retain the approved table/two-chart UI and New York/calendar rules.
+5. Finish one current contract for each distinct operation: initial non-refund
+   history, dedicated deferred refunds, weekly intake, ChatGPT review and backup.
+   Do not support multiple revisions of any contract without asking the user.
+   Include complete partition/column accounting, independent debit/credit/net/
+   spending/source/tab/treatment controls, concrete previews, atomic commitment,
+   exact replay checks and explicit reconciliation of changed facts. Update
+   producer instructions and synthetic fixtures together with the current schema.
+6. Trace every acceptance case in the requirements/developer handoffs to actual
+   tests. Run all available Windows checks, Mac persistence/build checks and one
+   combined iPad/current-format iCloud backup/download/restore session. Publish
+   the complete current contracts, capability matrix and validation evidence.
+   Keep real import blocked until all agreed financial behavior is implemented
+   and validated. Prototype compatibility is not part of this completion gate.
 
 Implemented in this follow-up: calendar-month six-month bounds, explicit New York
 reporting-date defaults/Monday grouping, initial-migration pause, and these
 decision/audit documents. The full financial framework is **not implemented yet**.
 
 ## Verification
+
+The preservation-policy/plan revision changes documentation only. Existing
+runtime compatibility code has not been removed in this planning update; its
+replacement belongs to the framework implementation. Earlier test evidence below
+remains historical. No new runtime tests were needed for this documentation edit.
 
 All **121 portable tests passed** on Windows Swift 6.4.1, including the new
 six-calendar-month boundary checks and New York winter/summer midnight checks.

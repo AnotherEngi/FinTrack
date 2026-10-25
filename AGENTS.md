@@ -110,6 +110,30 @@ does not change the requirement to keep financial data and credentials private.
 
 ## Implementation guidance
 
+### Architecture-breaking changes and preservation
+
+Before an architecture-breaking change, **ask the user what existing data,
+formats, schemas, models, or other objects need to be preserved**. Do not decide
+to support multiple revisions, add backward-compatible readers/writers, migration
+chains, adapters, converters, fallbacks, or parallel object models before the user
+answers. Describe the affected state and the preservation/reset choices clearly.
+Do not silently delete or reset existing state as the alternative to compatibility.
+
+An explicit answer already supplied for the same scope is sufficient; do not ask
+again. For the planned pre-release financial-framework rebuild, the user has
+confirmed that old development structures/formats have no preservation value.
+Use **one current model/store schema and one current contract per purpose**;
+replace obsolete prototype formats and compatibility-only fixtures when doing
+that rebuild. Do not add legacy-backup reading or development-schema migrations
+to its plan. This answer is not a blanket waiver for future breaking changes.
+
+Version markers may identify/reject incompatible input without supporting older
+versions. Financial lifecycle history, source evidence, exact money, atomic saves,
+current-format backup/restore, and record-revision conflict checks remain required.
+These preserve financial meaning and current-state correctness. Earlier notes
+about prototype compatibility describe existing code/history, not a requirement
+to perpetuate it; this rule supersedes any earlier compatibility instruction.
+
 ### Command execution preference
 
 The user clarified this preference on 2026-10-25: **run every applicable test and
@@ -235,7 +259,8 @@ which checks actually ran here and which require the Mac or physical iPad.
 - The user confirmed separating discussion answers from category/tag proposals.
   Answers are readable with Reply/Mark Resolved; only actual record changes use
   Apply changes/Keep current. Import records matching acknowledgements, never
-  approvals or automatic financial edits. Preserve legacy response compatibility.
+  approvals or automatic financial edits. Existing prototype response compatibility
+  is not a requirement for the framework rebuild; apply the preservation rule above.
   Discussions replaces Questions, with a thin question column beside activity.
   Reply drafts/messages/closure are optional V3 workspace fields, backed up.
 - Send, Import, and Backup are independent screens without a shared page picker. Lock preparation choices
@@ -290,8 +315,9 @@ which checks actually ran here and which require the Mac or physical iPad.
 - Confirmed amount convention: positive outflows/expenses, negative refunds and
   other inflows (including income), matching the legacy ledger. Sign alone does
   not determine accounting treatment. Fresh stores carry an outflow-positive-v1
-  marker; unmarked older stores/drafts require explicit migration and remain
-  preserved. Never silently flip existing amounts or reset a store.
+  marker; the current prototype refuses unmarked older stores/drafts. Apply the
+  preservation rule before deciding whether any conversion or reset is needed.
+  Never silently flip existing amounts or reset a store.
 - Re-imports and stale AI suggestions must not overwrite newer manual edits.
   Preserve source identity/provenance; ambiguous duplicate matches need review.
 - Commit related changes atomically; a split must balance to its parent. Report

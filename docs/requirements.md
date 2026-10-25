@@ -1,5 +1,11 @@
 # FinTrack requirements and implementation plan
 
+**Pre-release architecture policy:** obsolete development formats do not require
+preservation in the planned framework rebuild. Use one current model/schema and
+one current contract per purpose. Before a future breaking change, ask the user
+what data/objects must survive before deciding on multiple revisions or migration
+support. See [the revised plan](import-framework-decisions.md) and AGENTS.md.
+
 **Real migration paused pending the full import framework.** See the
 [supplied requirements snapshot](import-framework-requirements.md),
 [user-confirmed decisions and implementation sequence](import-framework-decisions.md),

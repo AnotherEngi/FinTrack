@@ -1,5 +1,11 @@
 # Development and verification
 
+Current framework work targets one current model, store schema and format per
+purpose. Earlier development migration/compatibility notes below describe the
+prototype; they are not preservation requirements for the rebuild. Follow the
+architecture-breaking-change question rule in AGENTS.md and
+[the current implementation plan](import-framework-decisions.md).
+
 Latest clarification: [framework decisions](import-framework-decisions.md).
 Real migration is paused and initial-history acceptance blocked pending the full
 framework. Six months now uses the current month plus five full preceding months;
