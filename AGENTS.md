@@ -112,14 +112,50 @@ does not change the requirement to keep financial data and credentials private.
 
 ### Command execution preference
 
-The user authorized the current additional hardening pass and one final GitHub
-push. After that exception is completed, **provide human-run commands only**.
-Do not execute shell/terminal commands (including tests, Git commits, or pushes)
-on the user's behalf without an explicit additional exception. Earlier permission
-to push this implementation does not carry forward to subsequent work. This is a
-user instruction, not an inferred approval requirement from a skill.
+The user clarified this preference on 2026-10-25: **run every applicable test and
+check available in this environment**, fix failures, and report the actual
+results. Shell commands, local builds/tests, syntax checks, and read-only/local
+Git operations are permitted. Do not leave runnable checks for the user merely
+because of the earlier human-run-command restriction; that restriction is
+superseded.
+
+**Only Git operations that write to a remote server are human-run**, including
+pushes and remote branch/tag deletion. Do not execute those operations unless
+the user explicitly grants another exception. Local commits still need a task
+request/authorization; permission to run checks is not a request to commit
+unrelated work.
+
+Whenever remote-writing Git commands are the next step, **automatically provide
+the exact commands** after preparing/reviewing the changes. Do not wait for the
+user to ask again. Also automatically provide any required Mac-only build/test
+and installation commands when this Windows environment cannot run them. State
+which checks actually ran here and which require the Mac or physical iPad.
 
 ### Implementation state
+
+- Latest lifecycle/retention safety batch: all 108 portable tests passed on
+  Windows Swift 6.4.1 on 2026-10-25; all 18 Apple app/persistence source/test
+  files passed syntax parsing. Native package tests, Apple typechecking/build,
+  and iPad/cloud validation still require the Mac/device. No Git publication
+  was executed. Follow
+  [data inventory](docs/data-retention.md) and [verification](docs/lifecycle-validation.md).
+- User approved ephemeral ChatGPT conversations: Approve closes the current
+  discussion. Keep financial state, user notes/last answer, accepted guidance,
+  unacknowledged feedback and compact replay receipts. Completed raw files are
+  removed; parsed open answers remain until closure. Do not delete unfinished
+  drafts/proposals by age. Dismissal is explicit and never acknowledges feedback.
+- New logical .fintrack archive v2 is separate from AI's 50 MiB JSON contract,
+  with bounded/compressed entries, integrity checks, precommit capacity limits
+  and legacy JSON read compatibility. Candidate files replace embedded journal
+  bytes. A confirmed replacement precedes old-file cleanup. Limits are format
+  ceilings, not measured device capacity. App-level encryption is still undecided.
+- Startup recovery builds/verifies an isolated database and atomically switches
+  ActiveStore.json. Preserve original databases/markers/sidecars until explicit
+  user deletion. Never create an empty replacement for a missing selected store.
+  Recovery can explicitly restore an empty snapshot without deleting originals.
+- Both intake paths now flag linked/unlinked/same-batch duplicate candidates;
+  known superseded versions/IDs cannot regress facts. Genuine chronology and
+  stable provider/account namespaces still need a collector v2 contract.
 
 - Latest 2026-10-25 design supersedes the earlier Overview: two side-by-side
   charts (category-stacked period bars and matching pie), temporary legend
@@ -137,8 +173,9 @@ user instruction, not an inferred approval requirement from a skill.
   guess or subtract them on the receipt date. Validate refund and purchase caps,
   persist raw drafts on failure, and include read-only links in review packets.
 - Send/Import/Backup now use independent screens, not tabs of one transfer sheet.
-  This new batch has not been compiled/tested or published; human-run commands
-  only remain in effect. Earlier passed test counts apply to the previous revision.
+  The earlier source-only batch was not compiled/tested when prepared; use the
+  current verification record for subsequent test results. Remote-writing Git
+  commands remain human-run under the clarified preference above.
 
 - Latest iPad feedback: all populated category/tag values have colored review
   pills, including older unknown provenance (orange needs review; keep stored
@@ -217,7 +254,7 @@ user instruction, not an inferred approval requirement from a skill.
 
 ## Validation and environment
 
-- Current review/backup/discussion/chart batch: all **83** portable tests pass on Windows Swift
+- Previous review/backup/discussion/chart batch: all **83** portable tests passed on Windows Swift
   6.4.1. Hardening results are recorded
   in docs/device-verification.md. Fourteen Apple source/test files pass Windows
   syntax parsing only. There are 27 Apple persistence tests (two added by the final hardening pass); the user runs them

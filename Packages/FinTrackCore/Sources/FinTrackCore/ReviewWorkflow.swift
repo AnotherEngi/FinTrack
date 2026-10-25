@@ -305,6 +305,8 @@ public struct SourceLink: Codable, Sendable {
     public let recordID: UUID
     public let original: WeeklyTransaction
     public var latest: WeeklyTransaction
+    public var supersededDigests: Set<String>?
+    public var supersededBy: BankIdentity?
     public init(identity: BankIdentity, recordID: UUID, original: WeeklyTransaction) {
         self.identity = identity; self.recordID = recordID; self.original = original; latest = original
     }
@@ -336,6 +338,10 @@ public struct ReviewWorkspace: Codable, Sendable {
     public var resolvedDiscussions: [String: DiscussionBoundary]?
     public var discussionDrafts: [String: DiscussionDraft]?
     public var summaryVisibility: SummaryVisibility?
+    public var importReceipts: [ImportReceipt]?
+    public var retiredPacketIDs: Set<UUID>?
+    public var discussionAnswers: [DiscussionAnswer]?
+    public var discussionClosedRevisions: [String: String]?
     public init() {}
 
     public mutating func recordUserChange(before: LedgerTransaction?, after: LedgerTransaction, kind: String = "user-edit") {
@@ -410,8 +416,17 @@ public struct ReviewWorkspace: Codable, Sendable {
         switch header.purpose {
         case "fintrack-review-response":
             let response = try ExchangeJSON.decode(ReviewResponse.self, from: data)
-            try validate(response)
             canonical = try ExchangeJSON.encode(response)
+            if let receipt = importReceipts?.first(where: { $0.id == header.id }) {
+                guard receipt.purpose == header.purpose, receipt.digest == ContentDigest.sha256(canonical) else {
+                    throw ExchangeError.invalid("A completed file ID was reused with changed contents.")
+                }
+                return
+            }
+            guard !(retiredPacketIDs ?? []).contains(response.packetID) else {
+                throw ExchangeError.invalid("This review packet has been completed or retired. Prepare a new review for late changes.")
+            }
+            try validate(response)
         case "fintrack-weekly-intake":
             let batch = try ExchangeJSON.decode(WeeklyBatch.self, from: data)
             guard batch.transactions.count <= 10_000, batch.coverage.count <= 10_000,
@@ -422,6 +437,12 @@ public struct ReviewWorkspace: Codable, Sendable {
             canonical = try ExchangeJSON.encode(batch)
         default: throw ExchangeError.invalid("This is not a FinTrack response or weekly intake file.")
         }
+        if let receipt = importReceipts?.first(where: { $0.id == header.id }) {
+            guard receipt.purpose == header.purpose, receipt.digest == ContentDigest.sha256(canonical) else {
+                throw ExchangeError.invalid("A completed file ID was reused with changed contents.")
+            }
+            return
+        }
         if let existing = staged.first(where: { $0.id == header.id }) {
             guard existing.data == canonical else { throw ExchangeError.invalid("A file ID was reused with changed contents.") }
             return
@@ -429,6 +450,9 @@ public struct ReviewWorkspace: Codable, Sendable {
         if header.purpose == "fintrack-review-response" {
             let response = try ExchangeJSON.decode(ReviewResponse.self, from: canonical)
             let proposed = Set(response.proposals.map(\.id) + response.knowledgeProposals.map(\.id) + response.answers.map(\.id))
+            guard proposed.isDisjoint(with: (importReceipts ?? []).flatMap(\.itemIDs)) else {
+                throw ExchangeError.invalid("A completed response item ID was reused. Ask for fresh IDs.")
+            }
             for file in staged where file.purpose == "fintrack-review-response" {
                 let previous = try ExchangeJSON.decode(ReviewResponse.self, from: file.data)
                 let used = Set(previous.proposals.map(\.id) + previous.knowledgeProposals.map(\.id) + previous.answers.map(\.id))
@@ -535,6 +559,10 @@ public struct ReviewWorkspace: Codable, Sendable {
     Put discussion replies in an answers array: each answer has id UUID, recordID,
     expectedRevision string from manifest, text, optional questionForUser. Reading an answer
     requires no acceptance. Use discussionContext for earlier user replies and ChatGPT answers.
+    Approval closes the current classification discussion. Historical user notes/answers can
+    retain old question wording; do not treat that wording as an open question when the
+    supplied discussion is resolved or the record is approved. New classification proposals
+    still require explicit user review and never imply approval or automatic edits.
     Only create classification proposals for actual category/tag changes; never wrap a plain
     discussion reply or clarification in a classification proposal. Questions for the user
     belong in answers.questionForUser. The user may reply or mark a discussion resolved.
@@ -604,7 +632,7 @@ public struct FullBackup: Codable, Sendable {
     public func validate(catalog: ReviewCatalog) throws {
         guard schemaVersion == 1, purpose == "fintrack-full-backup",
               amountSignConvention == Money.amountSignConvention,
-              records.count <= 100_000, Set(records.map(\.id)).count == records.count,
+              records.count <= BackupCapacity.maximumRecords, Set(records.map(\.id)).count == records.count,
               Set(workspace.pending.map(\.id)).count == workspace.pending.count,
               Set(workspace.knowledge.map(\.id)).count == workspace.knowledge.count,
               Set(workspace.manifests.map(\.id)).count == workspace.manifests.count,
@@ -615,6 +643,14 @@ public struct FullBackup: Codable, Sendable {
             throw ExchangeError.invalid("The backup is invalid or has an unsupported version/convention.")
         }
         let ids = Set(records.map(\.id))
+        var recordBytes = 0
+        for record in records {
+            let size = try JSONEncoder().encode(record).count
+            guard size <= BackupCapacity.maximumEntryBytes else { throw ExchangeError.invalid("A record exceeds the 80 MiB backup-entry limit.") }
+            recordBytes += size + 512
+        }
+        try BackupCapacity.validate(recordCount: records.count, recordBytes: recordBytes, workspace: workspace)
+        try workspace.validateRetention(records: records)
         try workspace.summaryVisibility?.validate(recordIDs: ids)
         try RefundAccounting.validate(records: records)
         let revisions = Dictionary(uniqueKeysWithValues: records.map { ($0.id, $0.revision) })
@@ -654,6 +690,7 @@ public struct FullBackup: Codable, Sendable {
         guard workspace.knowledge.count <= 1_000, workspace.knowledge.allSatisfy({
             !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && $0.text.count <= 10_000
         }) else { throw ExchangeError.invalid("Invalid backup classification guidance.") }
+        let sourcesByIdentity = Dictionary(uniqueKeysWithValues: workspace.sourceLinks.map { ($0.identity, $0) })
         for link in workspace.sourceLinks {
             guard ids.contains(link.recordID) else { throw ExchangeError.invalid("Backup source link has no record.") }
             _ = try link.original.draft()
@@ -661,6 +698,23 @@ public struct FullBackup: Codable, Sendable {
             guard link.identity == link.original.identity, link.identity == link.latest.identity else {
                 throw ExchangeError.invalid("Backup source identities disagree.")
             }
+            guard (link.supersededDigests ?? []).allSatisfy({ text in
+                text.count == 64 && text.utf8.allSatisfy({ (48...57).contains($0) || (97...102).contains($0) })
+            }) else { throw ExchangeError.invalid("Invalid source-history fingerprint.") }
+            if let successor = link.supersededBy {
+                guard successor != link.identity, sourcesByIdentity[successor]?.recordID == link.recordID else {
+                    throw ExchangeError.invalid("A superseded source has no matching successor.")
+                }
+            }
+        }
+        var checkedSources: Set<BankIdentity> = []
+        for identity in sourcesByIdentity.keys {
+            var path: Set<BankIdentity> = [], next: BankIdentity? = identity
+            while let current = next, !checkedSources.contains(current) {
+                guard path.insert(current).inserted else { throw ExchangeError.invalid("Cyclic source supersession in backup.") }
+                next = sourcesByIdentity[current]?.supersededBy
+            }
+            checkedSources.formUnion(path)
         }
         for key in workspace.drafts.keys {
             guard UUID(uuidString: key) != nil else { throw ExchangeError.invalid("Invalid backup draft ID.") }

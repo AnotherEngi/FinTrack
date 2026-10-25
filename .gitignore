@@ -22,6 +22,16 @@
 *.store
 *.store-*
 *.store.amount-sign
+*.fintrack
+FinTrack-backup-*.json
+FinTrack-????????-????-????-????-????????????.json
+.archive-*.partial
+.FinTrack-upload-*.partial
+BackupConnection*.json
+BeforeRestore.json
+ActiveStore.json
+.ActiveStore-*.json
+PreviousStore*.json
 
 # Swift/Xcode output and personal state. Synthetic CSV/JSON fixtures stay trackable.
 .build/

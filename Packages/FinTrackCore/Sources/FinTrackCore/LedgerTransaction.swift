@@ -198,9 +198,11 @@ public struct LedgerTransaction: Codable, Equatable, Identifiable, Sendable {
         let nextApproval: ApprovalStatus = request.action == .approve ? .confirmed
             : request.action == .reopen ? .unreviewed : approval
         let discusses = request.action == .discuss || request.action == .markDiscussionInProgress
+        let context = request.action == .approve || request.action == .resolveDiscussion
+            ? AssistantContext(ledgerNotes: assistantContext.ledgerNotes) : assistantContext
         return try Self(id: id, revision: next, createdAt: createdAt, updatedAt: appliedAt,
             draft: draft, approval: nextApproval, discussionRequested: discusses,
-            assistantContext: assistantContext, reviewHistory: reviewHistory + [decision],
+            assistantContext: context, reviewHistory: reviewHistory + [decision],
             classificationProvenance: classificationProvenance,
             discussionProgress: discusses ? (request.action == .discuss ? .awaitingExport : .reviewingInChatGPT) : nil)
     }

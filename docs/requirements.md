@@ -1,5 +1,17 @@
 # FinTrack requirements and implementation plan
 
+Latest lifecycle batch: see [implemented safety changes and verification](lifecycle-validation.md)
+and [data retention](data-retention.md). Approval closes the current discussion;
+raw responses are temporary, completed imports retain compact fingerprints, and
+unsent feedback survives closure. Independent startup recovery and versioned
+streaming backups remove dependence on a readable/current-size-bounded database.
+Both intake paths check linked/same-batch candidates; guidance limits are uniform.
+All 108 portable tests passed on Windows; 18 Apple files passed syntax parsing.
+Native builds/tests and device/cloud validation remain pending, with no new Git
+publication. Remaining
+collector, migration, indexing, history-review and encryption decisions are listed
+in the validation guide. Earlier verification counts are historical.
+
 Status: synthetic prototype. Earlier native/iPad passes predate this batch.
 Current source implements the approved table, durable automatic review packets,
 full-history review, incoming receipts/proposals, weekly source-ID intake,

@@ -105,7 +105,8 @@ private enum ExchangeWriteFailure: Error { case disk }
     try repository.stageIncoming(ExchangeJSON.encode(response))
     try repository.stageIncoming(ExchangeJSON.encode(response))
     #expect(try repository.fetchAll().first == newer)
-    #expect(try repository.workspace().processedFiles == [response.id])
+    #expect(try repository.workspace().processedFiles.isEmpty)
+    #expect(try repository.workspace().importReceipts?.contains { $0.id == response.id } == true)
     #expect(try repository.workspace().pending.count == 1)
     #expect(try repository.workspace().discussion(for: newer)?.answers == [answer])
 }
@@ -177,7 +178,7 @@ private enum ExchangeWriteFailure: Error { case disk }
     try repository.decideProposal(fileID: response.id, proposalID: proposal.id, accept: false)
     #expect(try repository.workspace().pending.count == count)
     let reopened = try LocalTransactionRepository(storeURL: url)
-    #expect(try reopened.workspace().decidedProposals.contains(proposal.id))
+    #expect(try reopened.workspace().importReceipts?.contains { $0.decisionIDs?.contains(proposal.id) == true } == true)
     #expect(try reopened.fetchAll().first?.draft.notes == "Synthetic newer note")
 }
 
@@ -194,16 +195,23 @@ private enum ExchangeWriteFailure: Error { case disk }
     let packet = try repository.prepareReview(mode: .pending)
     let proposal = ClassificationProposal(recordID: record.id, expectedRevision: String(record.revision),
         categoryID: "sample-household", rationale: "Synthetic")
-    let response = ReviewResponse(packetID: packet.manifest.id, knowledgeVersion: packet.manifest.knowledgeVersion, proposals: [proposal])
+    let response = ReviewResponse(packetID: packet.manifest.id, knowledgeVersion: packet.manifest.knowledgeVersion,
+        acknowledgedOperationIDs: packet.manifest.operationIDs, proposals: [proposal])
     try repository.stageIncoming(ExchangeJSON.encode(response))
     fail = true
     #expect(throws: ExchangeWriteFailure.self) { try repository.decideProposal(fileID: response.id, proposalID: proposal.id, accept: true) }
     #expect(try repository.fetchAll().first == record)
     #expect(try !repository.workspace().decidedProposals.contains(proposal.id))
+    #expect(try repository.workspace().staged.contains { $0.id == response.id })
+    #expect(try repository.workspace().importReceipts?.contains { $0.id == response.id } != true)
     fail = false
     try repository.decideProposal(fileID: response.id, proposalID: proposal.id, accept: true)
     #expect(try repository.fetchAll().first?.classificationProvenance.category == .assistant)
     #expect(try repository.workspace().pending.last?.kind == "proposal-decision")
+    let change = try #require(repository.workspace().pending.first { $0.kind == "accepted-assistant-change" })
+    #expect(change.recordID == record.id && change.savedValues["categoryID"] == "sample-household")
+    let next = try repository.prepareReview(mode: .pending)
+    #expect(next.snapshot?.transactions.first { $0.transactionID == record.id }?.categoryID == "sample-household")
 }
 
 @MainActor

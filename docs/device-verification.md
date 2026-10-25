@@ -1,5 +1,12 @@
 # Device verification record
 
+2026-10-25 lifecycle update: source now adds retention/compaction, independent
+startup recovery, archive v2, and intake/guidance fixes. **108 portable tests
+passed on Windows Swift 6.4.1; all 18 Apple files passed syntax parsing.** Native
+tests, the Xcode build, and device/cloud checks remain pending. Follow
+[the current verification guide](lifecycle-validation.md); earlier device passes
+below do not qualify the new code.
+
 Updated 2026-10-24. All device checks use synthetic transactions.
 
 ## Current review/intake/backup batch

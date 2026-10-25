@@ -1,10 +1,25 @@
 # Exchange and backup hardening pass
 
+## Latest lifecycle safety batch: Windows verified, Apple execution pending
+
+See [implemented changes and verification](lifecycle-validation.md) and
+[retention inventory](data-retention.md). All 108 portable tests passed on Windows
+and all 18 Apple source/test files passed syntax parsing. Three obsolete test
+expectations were corrected and Windows archive replacement gained a working
+filesystem path with overwrite coverage. Native testing/builds remain pending.
+Source review addressed replay after compaction, legacy closure migration,
+unfinished replies and idempotent approvals, record-scoped decision feedback,
+precommit archive capacity, bounded native decompression, source supersession,
+separate verified recovery, and old-backup cleanup ordering. An actual independent
+cloud-to-empty-store restore and device benchmarks remain required. Earlier
+test/parse results below describe prior revisions only.
+
 ## 2026-10-25 Overview and refund source review
 
-The new batch has undergone source review only; no terminal commands or tests
-were run because the user's human-run-command preference remains active.
-Eleven portable and three Apple persistence regressions were authored, not run.
+Initially prepared with source review only under the previous command restriction.
+The lifecycle follow-up ran all portable tests, including these eleven cases.
+The three Apple persistence regressions still require Mac execution. The agent
+now runs all available local checks; remote Git writes remain human-run.
 See [design and verification](design/overview.md) for the pending device checks.
 
 - Removed selection-driven chart modals and built-in hover selection bindings;

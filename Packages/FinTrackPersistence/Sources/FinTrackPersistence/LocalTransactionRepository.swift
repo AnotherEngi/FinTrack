@@ -42,6 +42,9 @@ public final class LocalTransactionRepository: TransactionRepository {
             guard convention == Money.amountSignConvention else {
                 throw PersistenceError.unsupportedAmountConvention
             }
+            guard FileManager.default.fileExists(atPath: storeURL.path) else {
+                throw ExchangeError.invalid("The existing database file is missing. Its marker and recovery files were preserved. Restore a backup or explicitly create a separate empty ledger.")
+            }
             return
         }
 
@@ -73,8 +76,7 @@ public final class LocalTransactionRepository: TransactionRepository {
     }
 
     public static func openDefault(catalog: ReviewCatalog = .prototype) throws -> LocalTransactionRepository {
-        try LocalTransactionRepository(storeURL:
-            applicationSupportDirectory().appendingPathComponent("FinTrack.store"), catalog: catalog)
+        try LocalTransactionRepository(storeURL: StoreRecovery.activeURL(in: applicationSupportDirectory()), catalog: catalog)
     }
 
     public func fetchAll() throws -> [LedgerTransaction] {
@@ -127,8 +129,17 @@ public final class LocalTransactionRepository: TransactionRepository {
         let updated = try current.applying(request, catalog: catalog)
         if updated != current {
             var workspace = try self.workspace()
+            if request.action == .approve || request.action == .resolveDiscussion {
+                guard workspace.discussionDrafts?[request.transactionID.uuidString]?.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false else {
+                    throw ExchangeError.invalid("Finish or discard the unfinished reply before closing this discussion.")
+                }
+                workspace.discussionDrafts?.removeValue(forKey: request.transactionID.uuidString)
+            }
             workspace.establishBaseline(records: try fetchAll())
             workspace.recordUserChange(before: current, after: updated, kind: request.action.rawValue)
+            if (request.action == .approve || request.action == .resolveDiscussion), workspace.discussion(for: current) != nil {
+                workspace.closeDiscussion(for: updated)
+            }
             try committing { try stored.apply(updated); try writeWorkspace(workspace) }
         }
         return updated
@@ -213,8 +224,56 @@ public final class LocalTransactionRepository: TransactionRepository {
         return ReviewWorkspace()
     }
 
+    public func capacityUsage() throws -> (records: Int, bytes: Int) {
+        let rows = try context.fetch(FetchDescriptor<Row>())
+        var bytes = 1_048_576
+        for row in rows { bytes += (try row.payload?.count ?? JSONEncoder().encode(row.value()).count) + 512 }
+        for row in try context.fetch(FetchDescriptor<LedgerSchemaV3.StoredWorkspace>()) { bytes += row.payload.count }
+        return (rows.count, bytes)
+    }
+
+    @discardableResult
+    public func maintainRetention(at: Date = .now) throws -> Bool {
+        let original = try workspace()
+        let records = try fetchAll()
+        let closed = Set(original.discussions(in: records).filter(\.isResolved).map(\.recordID))
+        var updates: [LedgerTransaction] = []
+        for record in records where (closed.contains(record.id) || (record.approval == .confirmed && !record.discussionRequested))
+            && record.revision < Int64.max && original.drafts[record.id.uuidString] == nil
+            && original.discussionDrafts?[record.id.uuidString] == nil {
+            guard !record.assistantContext.question.isEmpty || !record.assistantContext.reason.isEmpty else { continue }
+            updates.append(try LedgerTransaction(id: record.id, revision: record.revision + 1, createdAt: record.createdAt,
+                updatedAt: max(at, record.updatedAt), draft: record.draft, approval: record.approval,
+                discussionRequested: record.discussionRequested, assistantContext: AssistantContext(ledgerNotes: record.assistantContext.ledgerNotes),
+                reviewHistory: record.reviewHistory, classificationProvenance: record.classificationProvenance,
+                discussionProgress: record.discussionProgress))
+        }
+        var updated = original
+        let replacements = Dictionary(uniqueKeysWithValues: updates.map { ($0.id, $0) })
+        for record in records where closed.contains(record.id) && original.resolvedDiscussions?[record.id.uuidString] != nil {
+            updated.closeDiscussion(for: replacements[record.id] ?? record)
+        }
+        try updated.compactCompletedExchanges(records: records.map { replacements[$0.id] ?? $0 }, at: at)
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
+        guard try encoder.encode(original) != encoder.encode(updated) || !updates.isEmpty else { return false }
+        try committing {
+            for record in updates { if let stored = try row(id: record.id) { try stored.apply(record) } }
+            try writeWorkspace(updated)
+        }
+        return true
+    }
+
     private func writeWorkspace(_ value: ReviewWorkspace) throws {
         var value = value
+        try value.compactCompletedExchanges(records: fetchAll())
+        let rows = try context.fetch(FetchDescriptor<Row>())
+        var recordBytes = 0
+        for row in rows {
+            let bytes = try row.payload?.count ?? JSONEncoder().encode(row.value()).count
+            guard bytes <= BackupCapacity.maximumEntryBytes else { throw ExchangeError.invalid("A record exceeds the supported backup-entry size. Your previous saved data was preserved.") }
+            recordBytes += bytes + 512
+        }
+        try BackupCapacity.validate(recordCount: rows.count, recordBytes: recordBytes, workspace: value)
         value.generation = UUID()
         let encoded = try JSONEncoder().encode(value)
         if let row = try context.fetch(FetchDescriptor<LedgerSchemaV3.StoredWorkspace>()).first {
@@ -264,8 +323,23 @@ public final class LocalTransactionRepository: TransactionRepository {
         }
     }
 
+    public func dismissIncoming(fileID: UUID) throws {
+        var workspace = try self.workspace()
+        try workspace.dismissIncoming(fileID: fileID, records: fetchAll())
+        try committing { try writeWorkspace(workspace) }
+    }
+
+    public func markImportSummaryRead(fileID: UUID) throws {
+        var workspace = try self.workspace()
+        guard let index = workspace.importReceipts?.firstIndex(where: { $0.id == fileID }),
+              workspace.importReceipts?[index].unreadSummary != nil else { return }
+        workspace.importReceipts?[index].unreadSummary = nil
+        try committing { try writeWorkspace(workspace) }
+    }
+
     public func acknowledgeResponse(fileID: UUID) throws {
         var workspace = try self.workspace()
+        if workspace.importReceipts?.contains(where: { $0.id == fileID && $0.purpose == "fintrack-review-response" }) == true { return }
         let response = try response(fileID, workspace: workspace)
         guard !workspace.processedFiles.contains(response.id) else { return }
         try workspace.acknowledge(response)
@@ -274,19 +348,29 @@ public final class LocalTransactionRepository: TransactionRepository {
 
     public func decideProposal(fileID: UUID, proposalID: UUID, accept: Bool) throws {
         var workspace = try self.workspace()
+        if let receipt = workspace.importReceipts?.first(where: { $0.id == fileID }) {
+            guard receipt.decisionIDs?.contains(proposalID) == true else { throw ExchangeError.invalid("This processed reply has no editable financial proposal with that ID.") }
+            return
+        }
         let response = try response(fileID, workspace: workspace)
         try workspace.validate(response)
         guard !workspace.decidedProposals.contains(proposalID) else { return }
         var updated: LedgerTransaction?
+        var prior: LedgerTransaction?
         if let proposal = response.proposals.first(where: { $0.id == proposalID }) {
             guard proposal.categoryID != nil || proposal.tags != nil else {
                 throw ExchangeError.invalid("Discussion answers have no accept or reject action. Read or reply in Discussions.")
             }
+            prior = try row(id: proposal.recordID)?.value()
             if accept {
                 guard workspace.drafts[proposal.recordID.uuidString] == nil else { throw LedgerError.unfinishedDraft }
                 guard let stored = try row(id: proposal.recordID) else { throw LedgerError.recordNotFound }
                 updated = try stored.value().applyingSuggestion(proposal, catalog: catalog)
                 try updated?.validateReviewState(catalog: catalog)
+            }
+            if let prior {
+                workspace.recordUserChange(before: prior, after: updated ?? prior,
+                    kind: accept ? "accepted-assistant-change" : "proposal-kept-current")
             }
         } else if let proposal = response.knowledgeProposals.first(where: { $0.id == proposalID }) {
             if accept {
@@ -294,7 +378,10 @@ public final class LocalTransactionRepository: TransactionRepository {
                 if let replacing = proposal.replacingRuleID {
                     guard let index = workspace.knowledge.firstIndex(where: { $0.id == replacing }) else { throw LedgerError.recordNotFound }
                     workspace.knowledge[index] = KnowledgeRule(id: replacing, text: proposal.text, origin: "accepted-assistant")
-                } else { workspace.knowledge.append(KnowledgeRule(id: proposal.id, text: proposal.text, origin: "accepted-assistant")) }
+                } else {
+                    guard workspace.knowledge.count < 1_000 else { throw ExchangeError.invalid("The guidance library already contains 1,000 rules. Replace or retire a rule, then prepare a fresh review before adding another.") }
+                    workspace.knowledge.append(KnowledgeRule(id: proposal.id, text: proposal.text, origin: "accepted-assistant"))
+                }
                 workspace.knowledgeVersion = UUID()
                 workspace.knowledgeResponseID = response.id
                 workspace.pending.append(FeedbackEvent(kind: "knowledge-response", detail: response.id.uuidString))
@@ -387,6 +474,8 @@ public final class LocalTransactionRepository: TransactionRepository {
     public func acceptWeekly(fileID: UUID, identity: BankIdentity, matchingRecordID: UUID? = nil,
                              expectedRevision: Int64? = nil, allowSeparate: Bool = false) throws {
         var workspace = try self.workspace()
+        if workspace.importReceipts?.contains(where: { $0.id == fileID && $0.purpose == "fintrack-weekly-intake" && $0.disposition == "processed" }) == true,
+           workspace.sourceLinks.contains(where: { $0.identity == identity }) { return }
         guard let file = workspace.staged.first(where: { $0.id == fileID && $0.purpose == "fintrack-weekly-intake" }) else {
             throw ExchangeError.invalid("Weekly batch not found.")
         }
@@ -394,6 +483,13 @@ public final class LocalTransactionRepository: TransactionRepository {
         guard let source = batch.transactions.first(where: { $0.identity == identity }) else { throw LedgerError.recordNotFound }
         let linkIndex = workspace.sourceLinks.firstIndex { $0.identity == identity }
         if let linkIndex, workspace.sourceLinks[linkIndex].latest == source { return }
+        if let linkIndex {
+            let link = workspace.sourceLinks[linkIndex]
+            let digest = ContentDigest.sha256(try ExchangeJSON.encode(source))
+            guard link.supersededBy == nil, !(link.supersededDigests ?? []).contains(digest) else {
+                throw ExchangeError.invalid("This source version has been superseded. It cannot replace newer reconciled facts.")
+            }
+        }
         let existingID = linkIndex.map { workspace.sourceLinks[$0].recordID } ?? matchingRecordID
         let all = try fetchAll()
         let saved: LedgerTransaction
@@ -409,11 +505,9 @@ public final class LocalTransactionRepository: TransactionRepository {
         } else {
             // Unlinked manual/history rows can be the same purchase. Require explicit
             // reconciliation rather than silently duplicating them.
-            let linked = Set(workspace.sourceLinks.map(\.recordID))
             let facts = try source.draft(sourceID: all.first(where: { $0.draft.source?.label == identity.sourceAlias })?.draft.source?.id ?? UUID())
-            let ambiguous = all.contains { !linked.contains($0.id) && $0.draft.date == facts.date
-                && $0.draft.amount == facts.amount && $0.draft.payee.localizedCaseInsensitiveCompare(facts.payee) == .orderedSame }
-            guard !ambiguous || allowSeparate else { throw ExchangeError.invalid("Possible existing manual transaction. Choose Reconcile and the matching record, or explicitly add a separate purchase.") }
+            let ambiguous = try !IntakeMatching.candidates(for: source, in: all).isEmpty
+            guard !ambiguous || allowSeparate else { throw ExchangeError.invalid("Possible existing transaction, including a linked pending charge. Choose Reconcile and the matching record, or explicitly add a separate purchase.") }
             if let category = facts.categoryID, catalog.category(id: category) == nil { throw ReviewError.unresolvedCategory }
             let origins = Dictionary(uniqueKeysWithValues: facts.tags.map { ($0, ValueOrigin.assistant) })
             saved = try LedgerTransaction(draft: facts, classificationProvenance: .init(
@@ -421,8 +515,19 @@ public final class LocalTransactionRepository: TransactionRepository {
         }
         try saved.validateReviewState(catalog: catalog)
         try RefundAccounting.validate(records: all.filter { $0.id != saved.id } + [saved])
-        if let linkIndex { workspace.sourceLinks[linkIndex].latest = source }
+        if let linkIndex {
+            if workspace.sourceLinks[linkIndex].supersededDigests == nil { workspace.sourceLinks[linkIndex].supersededDigests = [] }
+            let oldDigest = ContentDigest.sha256(try ExchangeJSON.encode(workspace.sourceLinks[linkIndex].latest))
+            workspace.sourceLinks[linkIndex].supersededDigests?.insert(oldDigest)
+            workspace.sourceLinks[linkIndex].latest = source
+        }
         else { workspace.sourceLinks.append(SourceLink(identity: identity, recordID: saved.id, original: source)) }
+        if source.postingStatus == .posted {
+            for index in workspace.sourceLinks.indices where workspace.sourceLinks[index].recordID == saved.id
+                && workspace.sourceLinks[index].identity != identity && workspace.sourceLinks[index].latest.postingStatus == .pending {
+                workspace.sourceLinks[index].supersededBy = identity
+            }
+        }
         try committing {
             if let stored = try row(id: saved.id) { try stored.apply(saved) }
             else { context.insert(try Row(saved)) }
@@ -439,30 +544,31 @@ public final class LocalTransactionRepository: TransactionRepository {
     @discardableResult
     public func acceptNewWeeklyBatch(fileID: UUID) throws -> Int {
         var workspace = try self.workspace()
+        if workspace.importReceipts?.contains(where: { $0.id == fileID && $0.purpose == "fintrack-weekly-intake" && $0.disposition == "processed" }) == true { return 0 }
         guard let file = workspace.staged.first(where: { $0.id == fileID && $0.purpose == "fintrack-weekly-intake" }) else {
             throw ExchangeError.invalid("Weekly batch not found.")
         }
         let batch = try ExchangeJSON.decode(WeeklyBatch.self, from: file.data)
         let existing = try fetchAll()
-        let linkedRecords = Set(workspace.sourceLinks.map(\.recordID))
         let identities = Set(workspace.sourceLinks.map(\.identity))
         var additions: [LedgerTransaction] = []
+        var candidates = IntakeMatching.Index(records: existing)
         var sources: [String: UUID] = [:]
         for record in existing { if let source = record.draft.source { sources[source.label] = source.id } }
         for source in batch.transactions where !identities.contains(source.identity) {
             let sourceID = sources[source.identity.sourceAlias] ?? UUID()
             sources[source.identity.sourceAlias] = sourceID
             let facts = try source.draft(sourceID: sourceID)
-            guard !existing.contains(where: {
-                !linkedRecords.contains($0.id) && $0.draft.date == facts.date && $0.draft.amount == facts.amount
-                    && $0.draft.payee.localizedCaseInsensitiveCompare(facts.payee) == .orderedSame
-            }) else { throw ExchangeError.invalid("Possible existing transaction for \(source.merchant). Reconcile that row first; no batch additions were saved.") }
+            guard try candidates.candidates(for: source).isEmpty else {
+                throw ExchangeError.invalid("Possible existing transaction for \(source.merchant), including a linked pending purchase or another row in this file. Reconcile it first; no batch additions were saved.")
+            }
             if let category = facts.categoryID, catalog.category(id: category) == nil { throw ReviewError.unresolvedCategory }
             let record = try LedgerTransaction(draft: facts, classificationProvenance: .init(
                 category: facts.categoryID == nil ? .unknown : .assistant,
                 tags: Dictionary(uniqueKeysWithValues: facts.tags.map { ($0, ValueOrigin.assistant) })))
             try record.validateReviewState(catalog: catalog)
             additions.append(record)
+            candidates.add(record)
             workspace.sourceLinks.append(SourceLink(identity: source.identity, recordID: record.id, original: source))
         }
         guard !additions.isEmpty else { return 0 }

@@ -1,12 +1,20 @@
 # Development and verification
 
+Latest source batch: [lifecycle safety/retention verification](lifecycle-validation.md).
+All 108 portable tests passed on Windows Swift 6.4.1; all 18 Apple source/test
+files passed syntax parsing. Use that guide for results and remaining Mac/iPad
+checks; earlier passed counts below are historical. No commit/push was performed.
+
 Updated 2026-10-25. Use synthetic data throughout development.
 
-## Current unverified batch: 2026-10-25
+## Current batch: 2026-10-25
 
 Overview/Visibility/refund changes are documented in [the current design](design/overview.md).
-No terminal commands, Swift tests, Apple parsing, commits, or pushes were executed
-for this batch. The user's human-run-command preference remains active. Run:
+The lifecycle follow-up exercised the Overview/refund tests as part of the full
+108-test Windows pass. Native builds and device behavior remain unverified.
+The user clarified that the agent should run all available local checks; only
+remote-writing Git commands remain human-run and must be supplied automatically.
+For a subsequent portable-code change, the agent runs:
 
 ```powershell
 Set-Location 'C:\Users\rproi\source\repos\FinTrack'
@@ -35,8 +43,8 @@ See [hardening](hardening.md), [current guide](chatgpt-export.md), and the
 [combined acceptance session](ipad-acceptance.md). Historical counts below refer
 to earlier iterations, not this batch.
 
-After the final authorized hardening push, the user runs terminal/Git commands.
-Do not execute them on the user's behalf without an explicit additional exception.
+The previous all-command restriction was superseded on 2026-10-25. Run local
+checks; provide commands for remote Git writes and unavailable Mac/device checks.
 
 See [discussion and chart changes](review-flow.md). Xcode now references ten app
 source files. Swift Charts is an Apple framework dependency, not an installed

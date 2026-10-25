@@ -1,10 +1,17 @@
 # Discussions, review files, and spending views
 
+Latest retention decision: Approve or Mark Resolved closes the current discussion.
+Completed imports become compact receipts; open answers live separately until
+closure, and unsent feedback/drafts are preserved. Native backup export now writes
+a versioned .fintrack archive; restore is available even after startup failure.
+See [retention inventory](data-retention.md) and [pending validation](lifecycle-validation.md).
+
 2026-10-25 update: [Overview and visibility](design/overview.md) supersedes the
 Overview and transfer-page descriptions below. Send/Import/Backup are separate
 screens with no shared page picker. Overview now has two charts, temporary
 category toggles, inline click-only purchase selection, persistent Visibility,
-and refunds allocated to original purchase dates. This new batch awaits tests.
+and refunds allocated to original purchase dates. Portable tests now pass as part
+of the 108-test Windows suite; native build/device checks remain pending.
 
 Updated from physical-iPad feedback on 2026-10-24. The user confirmed separate
 discussion/record-change flows and category/month/year spending visualizations.

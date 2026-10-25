@@ -102,7 +102,7 @@ private func exportObject(_ export: ReviewExport) throws -> [String: Any] {
     #expect(first.packet.latestDate == "2026-09-21")
     #expect(first.prompt.contains(first.jsonFileName))
     #expect(first.prompt.contains(first.csvFileName))
-    #expect(first.prompt.contains("importing suggestions is not implemented"))
+    #expect(first.prompt.contains("use the returnTemplate in the app's prepared fintrack-review-request envelope"))
 }
 
 @Test func exportRejectsEmptyAndDuplicateSelections() throws {

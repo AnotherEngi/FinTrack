@@ -6,8 +6,8 @@ import FinTrackPersistence
 @MainActor
 @Observable
 final class LedgerViewModel {
-    private let repository: LocalTransactionRepository?
-    private let draftStore: DraftStore?
+    private var repository: LocalTransactionRepository?
+    private var draftStore: DraftStore?
     let catalog = ReviewCatalog.prototype
     private(set) var records: [LedgerTransaction] = []
     private(set) var drafts: [EditorDraft] = []
@@ -16,6 +16,9 @@ final class LedgerViewModel {
     private(set) var workspace = ReviewWorkspace()
     private(set) var discussions: [UUID: DiscussionThread] = [:]
     private(set) var backup: CloudBackup?
+    private(set) var capacityNotice: String?
+    private(set) var preservedStores: [PreservedStore] = []
+    var canExportBackup: Bool { repository != nil && startupFailure == nil }
     var message: String?
 
     func saveSummaryVisibility(_ value: SummaryVisibility) {
@@ -29,21 +32,25 @@ final class LedgerViewModel {
     init() {
         do { try Self.cleanupPreparedFiles() }
         catch { message = "Older temporary review files could not be removed: \(error.localizedDescription)" }
+        do { try Self.cleanupArchivePartials() }
+        catch { message = "Interrupted backup files could not be cleaned: \(error.localizedDescription)" }
+        do { backup = try CloudBackup(directory: LocalTransactionRepository.applicationSupportDirectory()) }
+        catch { message = "Automatic backup could not start: \(error.localizedDescription)" }
         do {
             let openedRepository = try LocalTransactionRepository.openDefault()
             let openedDraftStore = try DraftStore(directory:
                 LocalTransactionRepository.applicationSupportDirectory()
                     .appendingPathComponent("Drafts", isDirectory: true), repository: openedRepository)
+            try openedRepository.maintainRetention()
             repository = openedRepository
             draftStore = openedDraftStore
-            do { backup = try CloudBackup(directory: LocalTransactionRepository.applicationSupportDirectory()) }
-            catch { message = "Automatic backup could not start: \(error.localizedDescription)" }
         } catch {
             repository = nil
             draftStore = nil
             startupFailure = error.localizedDescription
         }
         reload()
+        refreshPreservedStores()
     }
 
     func reload() {
@@ -55,9 +62,14 @@ final class LedgerViewModel {
             let savedDiscussions = savedWorkspace.discussions(in: savedRecords)
             records = savedRecords; drafts = savedDrafts; workspace = savedWorkspace
             discussions = Dictionary(uniqueKeysWithValues: savedDiscussions.map { ($0.id, $0) })
+            let capacity = try repository.capacityUsage()
+            capacityNotice = capacity.records >= BackupCapacity.maximumRecords * 4 / 5
+                || capacity.bytes >= BackupCapacity.maximumLogicalBytes * 4 / 5
+                ? "Backup capacity is approaching its supported limit. Review storage in Backup." : nil
             backup?.schedule(FullBackup(records: savedRecords, workspace: savedWorkspace))
         } catch {
             message = "Unable to read saved data: \(error.localizedDescription)"
+            startupFailure = error.localizedDescription
         }
     }
 
@@ -138,6 +150,14 @@ final class LedgerViewModel {
         guard let repository else { throw LedgerError.recordNotFound }
         try repository.stageIncoming(data); reload()
     }
+    func dismissIncoming(_ id: UUID) throws {
+        guard let repository else { throw LedgerError.recordNotFound }
+        try repository.dismissIncoming(fileID: id); reload()
+    }
+    func markImportSummaryRead(_ id: UUID) throws {
+        guard let repository else { throw LedgerError.recordNotFound }
+        try repository.markImportSummaryRead(fileID: id); reload()
+    }
 
     func acknowledge(_ id: UUID) throws {
         guard let repository else { throw LedgerError.recordNotFound }
@@ -181,17 +201,23 @@ final class LedgerViewModel {
 
     func acceptWeeklyBatch(_ id: UUID) throws {
         guard let repository else { throw LedgerError.recordNotFound }
-        _ = try repository.acceptNewWeeklyBatch(fileID: id)
+        let added = try repository.acceptNewWeeklyBatch(fileID: id)
         reload()
+        message = "Added \(added) transactions. Any changed source IDs still listed need individual reconciliation; they were not silently applied."
     }
 
-    func exportBackup() throws -> URL {
+    func exportBackup() async throws -> URL {
         guard let repository else { throw LedgerError.recordNotFound }
-        return try shareFile(data: ExchangeJSON.encode(repository.backup()), name: "FinTrack-backup-\(UUID().uuidString).json")
+        let snapshot = try repository.backup()
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("FinTrackPrepared", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let url = directory.appendingPathComponent("FinTrack-backup-\(UUID().uuidString).fintrack")
+        return try await Task.detached(priority: .userInitiated) {
+            try NativeBackupArchive.write(snapshot, to: url); return url
+        }.value
     }
 
-    func validateBackup(_ data: Data) throws -> FullBackup {
-        let value = try ExchangeJSON.decode(FullBackup.self, from: data)
+    private func validateRawDrafts(_ value: FullBackup) throws {
         try value.validate(catalog: catalog)
         for (id, raw) in value.workspace.drafts {
             let draft = try JSONDecoder().decode(EditorDraft.self, from: raw)
@@ -199,23 +225,59 @@ final class LedgerViewModel {
                 throw ExchangeError.invalid("A backup draft has an invalid ID/revision.")
             }
         }
-        return value
+    }
+
+    func readBackup(_ url: URL) async throws -> FullBackup {
+        let value = try await Task.detached(priority: .userInitiated) { try NativeBackupArchive.readSelectedFile(url) }.value
+        try validateRawDrafts(value); return value
     }
 
     func restoreBackup(_ value: FullBackup) throws {
-        guard let repository else { throw LedgerError.recordNotFound }
-        // Retain one local pre-restore recovery copy, not an automatic cloud history.
-        let recovery = try LocalTransactionRepository.applicationSupportDirectory().appendingPathComponent("BeforeRestore.json")
-        try ExchangeJSON.encode(repository.backup()).write(to: recovery, options: .atomic)
-        try repository.restore(value)
+        try validateRawDrafts(value)
+        let directory = try LocalTransactionRepository.applicationSupportDirectory()
+        let id = try StoreRecovery.prepare(value, in: directory, catalog: catalog)
+        let preparedURL = directory.appendingPathComponent("Stores", isDirectory: true)
+            .appendingPathComponent(id.uuidString, isDirectory: true).appendingPathComponent("FinTrack.store")
+        let opened = try LocalTransactionRepository(storeURL: preparedURL, catalog: catalog)
+        let openedDrafts = try DraftStore(directory: directory.appendingPathComponent("Drafts", isDirectory: true), repository: opened)
+        try StoreRecovery.activate(id, in: directory, catalog: catalog)
+        repository = opened; draftStore = openedDrafts; startupFailure = nil
         sessionChanges = SessionChanges()
-        reload()
+        reload(); refreshPreservedStores()
+        message = "Backup restored and verified in a separate database. The previous database is preserved until you delete it in Backup."
+    }
+
+    func refreshPreservedStores() {
+        do { preservedStores = try StoreRecovery.preservedStores(in: LocalTransactionRepository.applicationSupportDirectory()) }
+        catch { preservedStores = [] }
+    }
+    func deletePreservedStore(_ id: String) throws {
+        try StoreRecovery.deletePreservedStore(id: id, in: LocalTransactionRepository.applicationSupportDirectory())
+        refreshPreservedStores()
+    }
+    func deleteLegacyRecoveryFiles() throws {
+        let directory = try LocalTransactionRepository.applicationSupportDirectory()
+        for url in try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: [.isRegularFileKey]) {
+            guard url.lastPathComponent == "BeforeRestore.json" ||
+                url.lastPathComponent == "PreviousStore.json" ||
+                ((url.lastPathComponent.hasPrefix("BackupConnection-damaged-") || url.lastPathComponent.hasPrefix("PreviousStore-"))
+                    && url.pathExtension == "json") else { continue }
+            guard try url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile == true else { continue }
+            try FileManager.default.removeItem(at: url)
+        }
     }
 
     func backupNow() async {
-        guard let repository else { return }
-        do { backup?.schedule(try repository.backup()); await backup?.retry() }
+        guard let repository, startupFailure == nil else { return }
+        do {
+            if try repository.maintainRetention() { reload() }
+            backup?.schedule(try repository.backup()); await backup?.retry()
+        }
         catch { message = "Could not prepare automatic backup: \(error.localizedDescription)" }
+        if backup?.isCurrent == true {
+            do { try cleanupMigratedFiles() }
+            catch { message = "The current backup is confirmed, but older local files could not be cleaned: \(error.localizedDescription)" }
+        }
     }
 
     private func shareFile(data: Data, name: String) throws -> URL {
@@ -236,9 +298,44 @@ final class LedgerViewModel {
             includingPropertiesForKeys: [.creationDateKey, .isRegularFileKey]) {
             let values = try url.resourceValues(forKeys: [.creationDateKey, .isRegularFileKey])
             guard values.isRegularFile == true, let date = values.creationDate, date < cutoff,
-                  url.pathExtension == "json",
+                  ["json", "fintrack"].contains(url.pathExtension),
                   url.lastPathComponent.hasPrefix("Review-") || url.lastPathComponent.hasPrefix("FinTrack-backup-") else { continue }
             try FileManager.default.removeItem(at: url)
+        }
+    }
+
+    private func cleanupMigratedFiles() throws {
+        let directory = try LocalTransactionRepository.applicationSupportDirectory()
+        let activeURL = try StoreRecovery.activeURL(in: directory)
+        if workspace.legacyDraftsMigrated && activeURL == directory.appendingPathComponent("FinTrack.store") {
+            let legacy = directory.appendingPathComponent("Drafts", isDirectory: true)
+            if FileManager.default.fileExists(atPath: legacy.path) {
+                for file in try FileManager.default.contentsOfDirectory(at: legacy, includingPropertiesForKeys: [.isRegularFileKey]) {
+                    guard file.pathExtension == "json", let id = UUID(uuidString: file.deletingPathExtension().lastPathComponent),
+                          try file.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile == true else { continue }
+                    let draft = try JSONDecoder().decode(EditorDraft.self, from: Data(contentsOf: file))
+                    guard draft.id == id else { continue }
+                    try FileManager.default.removeItem(at: file)
+                }
+            }
+        }
+        try Self.cleanupPreparedFiles()
+        try Self.cleanupArchivePartials()
+    }
+
+    private static func cleanupArchivePartials() throws {
+        let support = try LocalTransactionRepository.applicationSupportDirectory()
+        let directories = [support.appendingPathComponent("BackupCandidates", isDirectory: true),
+            FileManager.default.temporaryDirectory.appendingPathComponent("FinTrackPrepared", isDirectory: true)]
+        let cutoff = Date.now.addingTimeInterval(-86_400)
+        for directory in directories where FileManager.default.fileExists(atPath: directory.path) {
+            for file in try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: [.isRegularFileKey, .contentModificationDateKey]) {
+                guard file.lastPathComponent.hasPrefix(".archive-"), file.pathExtension == "partial",
+                      UUID(uuidString: String(file.deletingPathExtension().lastPathComponent.dropFirst(9))) != nil else { continue }
+                let info = try file.resourceValues(forKeys: [.isRegularFileKey, .contentModificationDateKey])
+                guard info.isRegularFile == true, let date = info.contentModificationDate, date < cutoff else { continue }
+                try FileManager.default.removeItem(at: file)
+            }
         }
     }
 

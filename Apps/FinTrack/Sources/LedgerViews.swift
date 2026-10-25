@@ -6,14 +6,21 @@ struct FinTrackRootView: View {
     @Bindable var ledger: LedgerViewModel
     @State private var tab = WorkspaceTab.review
     @State private var showBackup = false
+    @State private var confirmEmptyLedger = false
 
     private enum WorkspaceTab: Hashable { case overview, review, questions, history, export, visibility }
 
     var body: some View {
         Group {
             if let failure = ledger.startupFailure {
-                ContentUnavailableView("Unable to Open FinTrack", systemImage: "externaldrive.badge.exclamationmark",
-                    description: Text("\(failure)\nYour existing files have been preserved."))
+                VStack(spacing: 16) {
+                    ContentUnavailableView("Unable to Open FinTrack", systemImage: "externaldrive.badge.exclamationmark",
+                        description: Text("\(failure)\nYour existing files have been preserved."))
+                    Button("Restore a Backup", systemImage: "arrow.counterclockwise") { showBackup = true }
+                        .buttonStyle(.borderedProminent)
+                    Button("Create a Separate Empty Ledger", role: .destructive) { confirmEmptyLedger = true }
+                        .buttonStyle(.bordered).padding(.bottom, 24)
+                }
             } else {
                 TabView(selection: $tab) {
                     OverviewView(ledger: ledger) { tab = .review }
@@ -34,14 +41,21 @@ struct FinTrackRootView: View {
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            if ledger.startupFailure == nil && ledger.backup?.isCurrent != true {
+            if ledger.startupFailure == nil && (ledger.backup?.isCurrent != true || ledger.capacityNotice != nil) {
                 Button { showBackup = true } label: {
-                    Label(ledger.backup?.status ?? "Automatic iCloud backup needs attention.", systemImage: "icloud.and.arrow.up")
+                    Label(ledger.capacityNotice ?? ledger.backup?.status ?? "Automatic iCloud backup needs attention.", systemImage: "icloud.and.arrow.up")
                         .font(.caption).frame(maxWidth: .infinity).padding(6)
                 }.background(.thinMaterial)
             }
         }
         .sheet(isPresented: $showBackup) { BackupSettingsView(ledger: ledger) }
+        .confirmationDialog("Start with an empty ledger?", isPresented: $confirmEmptyLedger, titleVisibility: .visible) {
+            Button("Create Separate Empty Ledger", role: .destructive) {
+                do { try ledger.restoreBackup(FullBackup(records: [], workspace: ReviewWorkspace())) }
+                catch { ledger.message = "Could not create a new ledger: " + error.localizedDescription }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: { Text("Existing files are preserved. This activates a new empty database; use Restore instead if you have a backup to recover.") }
         .task {
             while !Task.isCancelled {
                 await ledger.backupNow()

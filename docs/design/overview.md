@@ -1,9 +1,10 @@
 # Overview, visibility, and purchase-date refunds
 
 User decisions, 2026-10-25. This supersedes the earlier three-chart Overview.
-Implemented in source; this batch has not been compiled or run on Windows,
-Mac, or iPad. The user requires human-run terminal commands after the previous
-authorized push. No new Git commit or push has been performed.
+Implemented in source. The lifecycle follow-up passed all 108 portable tests on
+Windows and parsed all 18 Apple source/test files. Mac/iPad execution remains
+pending. The user now asks the agent to run all available local checks and supply
+remote-writing Git commands automatically. No new commit or push was performed.
 
 ## Layout and interaction
 

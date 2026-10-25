@@ -2,6 +2,8 @@ import SwiftUI
 import UniformTypeIdentifiers
 import FinTrackCore
 
+private let backupContentType = UTType(filenameExtension: "fintrack", conformingTo: .data) ?? .data
+
 private enum ReviewPage: String, CaseIterable, Identifiable, Hashable {
     case send = "Send to ChatGPT", inbox = "Import reply", backup = "Backup"
     var id: Self { self }
@@ -67,6 +69,9 @@ private struct TransferForm: View {
     @State private var newRule = ""
     @State private var failure: String?
     @State private var working = false
+    @State private var deleteStoreID: String?
+    @State private var confirmDeleteStore = false
+    @State private var confirmCleanup = false
 
     var body: some View {
         NavigationStack {
@@ -104,6 +109,19 @@ private struct TransferForm: View {
                         }
                     }
                 }
+                Section("Processed files") {
+                    Text("Full files are removed once their results are recorded. Open questions remain in Discussions until approval or resolution.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    ForEach((ledger.workspace.importReceipts ?? []).reversed()) { receipt in
+                        NavigationLink { IncomingReviewView(ledger: ledger, fileID: receipt.id) } label: {
+                            VStack(alignment: .leading) {
+                                Text(receipt.purpose == "fintrack-weekly-intake" ? "Processed weekly file" : "Processed ChatGPT reply")
+                                if receipt.unreadSummary != nil { Text("Unread summary").font(.caption).foregroundStyle(.blue) }
+                                Text(receipt.compactedAt, format: .dateTime).font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
                 }
                 if page == .backup { backupSection }
             }
@@ -113,11 +131,11 @@ private struct TransferForm: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() }.disabled(working) }
             }
-            .fileImporter(isPresented: $showFilePicker, allowedContentTypes: filePurpose == .folder ? [.folder] : [.json]) {
+            .fileImporter(isPresented: $showFilePicker, allowedContentTypes: filePurpose == .folder ? [.folder] : filePurpose == .restore ? [.data, .json] : [.json]) {
                 handleSelection($0)
             }
-            .fileExporter(isPresented: $showBackupExporter, document: backupDocument, contentType: .json,
-                          defaultFilename: "FinTrack-backup-\(EditorDraft.dateText(.now))") { result in
+            .fileExporter(isPresented: $showBackupExporter, document: backupDocument, contentType: backupContentType,
+                          defaultFilename: "FinTrack-backup-\(EditorDraft.dateText(.now)).fintrack") { result in
                 switch result {
                 case .success: backupNotice = "Full backup file saved."
                 case .failure(let error):
@@ -127,13 +145,30 @@ private struct TransferForm: View {
             .interactiveDismissDisabled(working)
             .confirmationDialog("Replace saved data with this backup?", isPresented: $confirmRestore, titleVisibility: .visible) {
                 Button("Restore Backup", role: .destructive) {
-                    attempt { if let restoreCandidate { try ledger.restoreBackup(restoreCandidate) } }
+                    let snapshot = restoreCandidate
                     restoreCandidate = nil
+                    working = true
+                    Task {
+                        defer { working = false }
+                        await Task.yield()
+                        attempt { if let snapshot { try ledger.restoreBackup(snapshot) } }
+                    }
                 }
                 Button("Cancel", role: .cancel) { restoreCandidate = nil }
             } message: {
-                Text("Replace the ledger, drafts, pending reviews, and guidance with \(restoreCandidate?.records.count ?? 0) transactions from this backup. A local recovery copy is kept first.")
+                Text("Restore \(restoreCandidate?.records.count ?? 0) transactions, drafts, pending work, and guidance into a separate database. It is verified before activation. The previous database is preserved.")
             }
+            .confirmationDialog("Delete this preserved database and its recovery data?", isPresented: $confirmDeleteStore, titleVisibility: .visible) {
+                Button("Delete Preserved Database", role: .destructive) {
+                    attempt { if let deleteStoreID { try ledger.deletePreservedStore(deleteStoreID) } }; deleteStoreID = nil
+                }
+                Button("Cancel", role: .cancel) { deleteStoreID = nil }
+            } message: { Text("This cannot be undone. The active database and cloud backups are not deleted.") }
+            .confirmationDialog("Delete superseded local recovery files?", isPresented: $confirmCleanup, titleVisibility: .visible) {
+                Button("Delete Local Recovery Files", role: .destructive) { attempt { try ledger.deleteLegacyRecoveryFiles() } }
+                Button("Cancel", role: .cancel) {}
+            } message: { Text("Removes older restore files, retired database pointers, and damaged backup-settings copies. Keep them if they may help recover data. Active data, active backup settings, and cloud files remain.") }
+            .overlay { if working { ProgressView("Working…").padding().background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12)) } }
             .alert("Unable to Complete Action", isPresented: Binding(
                 get: { failure != nil }, set: { if !$0 { failure = nil } })) {
                 Button("OK") { failure = nil }
@@ -172,7 +207,12 @@ private struct TransferForm: View {
     }
 
     private var backupSection: some View {
+        Group {
         Section("iCloud backup") {
+            if !ledger.canExportBackup {
+                Text("The current database is unavailable. Restore can still build and verify a separate database from a good backup.").foregroundStyle(.orange)
+            }
+            if let notice = ledger.capacityNotice { Text(notice).foregroundStyle(.orange) }
             Label(ledger.backup?.status ?? "Automatic backup is unavailable. Relaunch and check its error.",
                   systemImage: ledger.backup?.isCurrent == true ? "checkmark.icloud" : "icloud.and.arrow.up")
             if let date = ledger.backup?.lastConfirmed {
@@ -185,14 +225,34 @@ private struct TransferForm: View {
             Text("Choose a dedicated folder inside iCloud Drive once. Saved changes back up automatically while FinTrack can run; interrupted or offline work retries on return. The previous complete backup stays until its replacement uploads.")
                 .font(.caption).foregroundStyle(.secondary)
             Button("Export Full Backup", systemImage: "externaldrive") {
-                attempt {
-                    backupDocument = try BackupFileDocument(data: Data(contentsOf: ledger.exportBackup()))
-                    showBackupExporter = true
+                working = true
+                Task {
+                    defer { working = false }
+                    do {
+                        backupDocument = BackupFileDocument(url: try await ledger.exportBackup())
+                        showBackupExporter = true
+                    } catch { failure = error.localizedDescription }
                 }
-            }
+            }.disabled(!ledger.canExportBackup)
             Text("Save a separate full backup anywhere in Files. No automatic-backup folder is needed.").font(.caption).foregroundStyle(.secondary)
             if let backupNotice { Text(backupNotice) }
             Button("Restore Full Backup", systemImage: "arrow.counterclockwise") { pick(.restore) }
+        }
+        Section("Preserved recovery data") {
+            ForEach(ledger.preservedStores) { store in
+                HStack {
+                    VStack(alignment: .leading) {
+                        Text(store.id == "legacy" ? "Previous original database" : "Previous or interrupted recovery database")
+                        if let date = store.createdAt { Text(date, format: .dateTime).font(.caption).foregroundStyle(.secondary) }
+                    }
+                    Spacer()
+                    Button("Delete", role: .destructive) { deleteStoreID = store.id; confirmDeleteStore = true }
+                }
+            }
+            Text("Previous databases are kept until you delete them. Check the restored ledger and its cloud backup first.").font(.caption).foregroundStyle(.secondary)
+            Button("Delete Superseded Local Recovery Files", role: .destructive) { confirmCleanup = true }
+                .disabled(!ledger.canExportBackup)
+        }
         }
     }
 
@@ -215,7 +275,17 @@ private struct TransferForm: View {
     private func handleSelection(_ result: Result<URL, Error>) {
         switch filePurpose {
         case .review: receive(result) { try ledger.stageIncoming($0) }
-        case .restore: receive(result) { restoreCandidate = try ledger.validateBackup($0); confirmRestore = true }
+        case .restore:
+            switch result {
+            case .failure(let error): if (error as? CocoaError)?.code != .userCancelled { failure = error.localizedDescription }
+            case .success(let url):
+                working = true
+                Task {
+                    defer { working = false }
+                    do { restoreCandidate = try await ledger.readBackup(url); confirmRestore = true }
+                    catch { failure = error.localizedDescription }
+                }
+            }
         case .folder:
             switch result {
             case .failure(let error): failure = error.localizedDescription
@@ -248,10 +318,8 @@ private struct TransferForm: View {
 private enum IncomingFileReader {
     static func read(_ url: URL) async throws -> Data {
         try await Task.detached(priority: .userInitiated) {
-            guard url.startAccessingSecurityScopedResource() else {
-                throw ExchangeError.invalid("Cannot access the selected file. Select it again in Files.")
-            }
-            defer { url.stopAccessingSecurityScopedResource() }
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
             var output: Data?
             var failure: Error?
             var coordinationError: NSError?
@@ -277,17 +345,20 @@ private enum IncomingFileReader {
 }
 
 private struct BackupFileDocument: FileDocument {
-    static var readableContentTypes: [UTType] { [.json] }
-    let data: Data
-    init(data: Data) { self.data = data }
+    static var readableContentTypes: [UTType] { [backupContentType, .json] }
+    static var writableContentTypes: [UTType] { [backupContentType] }
+    private let url: URL?
+    private let data: Data?
+    init(url: URL) { self.url = url; data = nil }
     init(configuration: ReadConfiguration) throws {
-        guard let data = configuration.file.regularFileContents, data.count <= ExchangeJSON.maximumBytes else {
+        guard let data = configuration.file.regularFileContents, data.count <= BackupCapacity.maximumFileBytes else {
             throw ExchangeError.invalid("Unable to read this backup file.")
         }
-        self.data = data
+        self.data = data; url = nil
     }
     func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
-        FileWrapper(regularFileWithContents: data)
+        if let url { return FileWrapper(regularFileWithContents: try Data(contentsOf: url, options: .mappedIfSafe)) }
+        return FileWrapper(regularFileWithContents: data ?? Data())
     }
 }
 
@@ -325,6 +396,9 @@ private struct IncomingReviewView: View {
     let fileID: UUID
     @State private var failure: String?
     @State private var discussionRecord: LedgerTransaction?
+    @State private var confirmDismiss = false
+    @State private var shownSummary: String?
+    @State private var loadedSummary = false
     var body: some View {
         List {
             if let file = ledger.workspace.staged.first(where: { $0.id == fileID }) {
@@ -334,8 +408,12 @@ private struct IncomingReviewView: View {
                         let batch = try? ExchangeJSON.decode(WeeklyBatch.self, from: file.data) {
                     Section("Source coverage") {
                         Text(batch.coverage)
+                        let links = Dictionary(uniqueKeysWithValues: ledger.workspace.sourceLinks.map { ($0.identity, $0.latest) })
+                        let unchanged = batch.transactions.filter { links[$0.identity] == $0 }.count
+                        let changed = batch.transactions.filter { links[$0.identity] != nil && links[$0.identity] != $0 }.count
+                        Text("\(batch.transactions.count - unchanged - changed) unmatched source IDs; \(unchanged) unchanged; \(changed) source updates requiring individual review.").font(.caption)
                         Button("Add All New Transactions") { attempt { try ledger.acceptWeeklyBatch(fileID) } }
-                        Text("Existing source IDs are skipped. Ambiguous matches stop the batch so you can reconcile them first.").font(.caption)
+                        Text("Unmatched IDs are checked against linked purchases and other rows before saving. Changed source facts are left for individual review. Ambiguous matches stop the entire batch.").font(.caption)
                     }
                     Section("Transactions") {
                         ForEach(Array(batch.transactions.enumerated()), id: \.offset) { entry in
@@ -343,8 +421,36 @@ private struct IncomingReviewView: View {
                         }
                     }
                 } else { Text("This stored file could not be decoded. It has been preserved.").foregroundStyle(.red) }
+                Section {
+                    Button("Dismiss Remaining Items in This File", role: .destructive) { confirmDismiss = true }
+                }
+            } else if let receipt = ledger.workspace.importReceipts?.first(where: { $0.id == fileID }) {
+                Section("Processed file") {
+                    Text("The full imported file has been removed. Accepted results remain in your ledger and guidance.")
+                    if let shownSummary { Text(shownSummary).textSelection(.enabled) }
+                    if let coverage = receipt.reportedCoverage { Text("Reported coverage (not independently verified): " + coverage).font(.caption) }
+                    let itemIDs = Set(receipt.itemIDs)
+                    let answers = (ledger.workspace.discussionAnswers ?? []).filter { itemIDs.contains($0.id) }
+                    ForEach(answers) { answer in
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(ledger.record(id: answer.recordID)?.draft.payee ?? "Transaction").font(.headline)
+                            Text(answer.text)
+                            if let question = answer.questionForUser { Text(question) }
+                            Button("Reply / Mark Resolved") { discussionRecord = ledger.record(id: answer.recordID) }
+                        }
+                    }
+                    if answers.isEmpty { Text("There are no retained open discussion answers from this file.").foregroundStyle(.secondary) }
+                }.onAppear {
+                    guard !loadedSummary else { return }
+                    loadedSummary = true; shownSummary = receipt.unreadSummary
+                    if receipt.unreadSummary != nil { attempt { try ledger.markImportSummaryRead(fileID) } }
+                }
             }
         }.modifier(ReviewFailureAlert(message: $failure))
+        .confirmationDialog("Dismiss unapplied items?", isPresented: $confirmDismiss, titleVisibility: .visible) {
+            Button("Dismiss Remaining Items", role: .destructive) { attempt { try ledger.dismissIncoming(fileID) } }
+            Button("Cancel", role: .cancel) {}
+        } message: { Text("Unapplied proposals or remaining weekly rows will be dismissed. Saved records, unsent feedback, and open discussions are kept. The raw file is replaced by a replay-protection receipt.") }
         .sheet(item: $discussionRecord) { record in DiscussionDetailView(ledger: ledger, recordID: record.id) }
     }
     @ViewBuilder
@@ -356,10 +462,14 @@ private struct IncomingReviewView: View {
             } else {
                 Button("Mark Response Received") { attempt { try ledger.acknowledge(response.id) } }
             }
-            Text("Answers are ready to read. Only an actual category or tag change needs your decision. Discussions stay open until you mark them resolved.")
+            Text("Answers are ready to read. Only an actual category or tag change needs your decision. Approve or Mark Resolved closes the current discussion.")
                 .font(.caption).foregroundStyle(.secondary)
         }
-        let replies = displayAnswers(response)
+        let replies = displayAnswers(response).filter { answer in
+            guard let record = ledger.record(id: answer.recordID) else { return false }
+            let closed = ledger.workspace.discussionClosureRevision(for: record)
+            return closed == 0 || (Int64(answer.expectedRevision) ?? 0) > closed
+        }
         if !replies.isEmpty {
             Section("Replies and questions") {
                 ForEach(replies) { answer in

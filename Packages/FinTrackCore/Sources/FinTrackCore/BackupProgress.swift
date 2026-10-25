@@ -4,8 +4,9 @@ public struct BackupVersion: Codable, Equatable, Sendable {
     public let id: UUID
     public let generation: UUID
     public let createdAt: Date
-    public var fileName: String { "FinTrack-\(id.uuidString).json" }
-    public init(generation: UUID, at: Date = .now) { id = UUID(); self.generation = generation; createdAt = at }
+    public let archiveVersion: Int?
+    public var fileName: String { "FinTrack-\(id.uuidString)." + (archiveVersion == 2 ? "fintrack" : "json") }
+    public init(generation: UUID, at: Date = .now) { id = UUID(); self.generation = generation; createdAt = at; archiveVersion = 2 }
 }
 
 /// One confirmed file plus at most one replacement. Cloud confirmation is supplied

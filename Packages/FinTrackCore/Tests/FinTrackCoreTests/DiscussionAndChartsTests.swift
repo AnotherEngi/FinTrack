@@ -110,9 +110,14 @@ private func discussionRecord() throws -> LedgerTransaction {
     let restored = try ExchangeJSON.decode(FullBackup.self, from: ExchangeJSON.encode(backup))
     try restored.validate(catalog: .prototype)
     #expect(restored.workspace.discussionDrafts == workspace.discussionDrafts)
-    #expect(restored.workspace.discussion(for: record)?.isResolved == true)
+    // Restoring unfinished input must make it discoverable even after prior closure.
+    #expect(restored.workspace.discussion(for: record)?.isResolved == false)
+    #expect(restored.workspace.discussion(for: record)?.status == .draft)
+    var finished = restored.workspace
+    finished.discussionDrafts = nil
+    #expect(finished.discussion(for: record)?.isResolved == true)
     var object = try #require(JSONSerialization.jsonObject(with: ExchangeJSON.encode(workspace)) as? [String: Any])
-    for key in ["discussionDrafts", "discussionReplies", "resolvedDiscussions"] { object.removeValue(forKey: key) }
+    for key in ["discussionDrafts", "discussionReplies", "resolvedDiscussions", "discussionClosedRevisions"] { object.removeValue(forKey: key) }
     let older = try ExchangeJSON.decode(ReviewWorkspace.self, from: JSONSerialization.data(withJSONObject: object))
     #expect(older.discussionDrafts == nil && older.resolvedDiscussions == nil)
 }

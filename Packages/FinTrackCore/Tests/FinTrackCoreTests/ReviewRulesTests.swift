@@ -40,7 +40,10 @@ private func action(_ kind: ReviewAction, on record: LedgerTransaction,
     let discussed = try action(.discuss, on: edited)
     #expect(discussed.approval == .confirmed)
     #expect(discussed.discussionRequested)
-    #expect(discussed.assistantContext == context)
+    // Approval discards resolved assistant discussion, while keeping ledger history.
+    #expect(discussed.assistantContext.question.isEmpty)
+    #expect(discussed.assistantContext.reason.isEmpty)
+    #expect(discussed.assistantContext.ledgerNotes == context.ledgerNotes)
     #expect(discussed.draft.notes == "My own explanation")
     #expect(discussed.draft.answer == "Household supplies")
 }
