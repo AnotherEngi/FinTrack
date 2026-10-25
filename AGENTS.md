@@ -133,6 +133,28 @@ which checks actually ran here and which require the Mac or physical iPad.
 
 ### Implementation state
 
+- Real history migration is now **paused until the entire financial framework is
+  implemented and validated**, not just the fields present in one source. The
+  supplied snapshot is docs/import-framework-requirements.md; user exceptions and
+  implementation sequence are docs/import-framework-decisions.md. The app blocks
+  initial-history acceptance; v1 import remains a synthetic decoder fixture only.
+- Next source-workflow request is docs/chatgpt-import-audit-request.md, not the old
+  migration-generation prompt. Defer merchant refunds into an accounted separate
+  set for a future dedicated refund contract. Initial purchases remain gross;
+  linked refunds later reduce purchase dates/categories. Flag already-netted
+  purchase values to prevent double subtraction. Do not invent purchase links.
+- Unresolved question => currently unapproved, even with earlier approval evidence.
+  Preserve historical evidence separately; it does not close an unresolved current
+  discussion. A new explicit Approve action still closes the current discussion.
+- Reporting is America/New_York with Monday weeks. Six months is the current
+  partial calendar month plus the previous five full months, inclusive through the
+  report date. Other presets were not redefined. Date-only records are not shifted
+  between time zones. Do not add workbook copies, fingerprints, bookmarks or
+  managed source references: the user retains the original independently. Normal
+  import-payload replay receipts/audits remain required, distinct from that file.
+  Follow-up validation: all 121 portable tests passed on Windows Swift 6.4.1;
+  all 19 native files parsed. This covers calendar/report-day behavior, not
+  completion of the full framework. Native UI/typechecking requires the Mac.
 - Latest requested batch: four distinct Overview cards, complete timeline periods
   including empty buckets, compact weekly labels, hidden-only Visibility lists
   with add pickers, individual hiding in the editor, and clipboard-first review

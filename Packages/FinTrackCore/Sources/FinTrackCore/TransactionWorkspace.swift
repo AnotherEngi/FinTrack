@@ -1,5 +1,22 @@
 import Foundation
 
+/// Confirmed reporting defaults. Date-only ledger fields are not shifted between
+/// zones; this calendar determines reporting "today" and date-picker boundaries.
+public enum ReportingCalendar {
+    public static let timeZoneIdentifier = "America/New_York"
+    public static let firstWeekday = 2 // Monday
+    public static var calendar: Calendar {
+        var result = Calendar(identifier: .gregorian)
+        result.timeZone = TimeZone(identifier: timeZoneIdentifier)!
+        result.firstWeekday = firstWeekday
+        return result
+    }
+    public static func dayText(at timestamp: Date) -> String {
+        let parts = calendar.dateComponents([.year, .month, .day], from: timestamp)
+        return String(format: "%04d-%02d-%02d", parts.year!, parts.month!, parts.day!)
+    }
+}
+
 public struct TransactionDateRange: Equatable, Sendable {
     public let from: TransactionDate
     public let through: TransactionDate
@@ -28,7 +45,10 @@ public enum WorkspacePeriod: String, CaseIterable, Sendable {
         switch self {
         case .oneMonth: start = calendar.date(byAdding: .month, value: -1, to: end)!
         case .threeMonths: start = calendar.date(byAdding: .month, value: -3, to: end)!
-        case .sixMonths: start = calendar.date(byAdding: .month, value: -6, to: end)!
+        case .sixMonths:
+            // Current partial calendar month plus the preceding five full months.
+            let monthStart = calendar.date(from: DateComponents(year: parts[0], month: parts[1], day: 1))!
+            start = calendar.date(byAdding: .month, value: -5, to: monthStart)!
         case .yearToDate: start = calendar.date(from: DateComponents(year: parts[0], month: 1, day: 1))!
         case .pastYear: start = calendar.date(byAdding: .year, value: -1, to: end)!
         case .custom: throw LedgerError.invalidDate

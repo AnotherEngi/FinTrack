@@ -92,7 +92,7 @@ struct TransactionListView: View {
     @State private var startDiscussion = false
     @State private var search = ""
     @State private var period = WorkspacePeriod.oneMonth
-    @State private var from = Calendar.current.date(byAdding: .month, value: -1, to: .now)!
+    @State private var from = ReportingCalendar.calendar.date(byAdding: .month, value: -1, to: .now)!
     @State private var through = Date.now
     @State private var amalgamate = false
     @State private var sort = TransactionTableSort()
@@ -102,10 +102,10 @@ struct TransactionListView: View {
     @State private var pendingRequest: ReviewRequest?
 
     private var range: TransactionDateRange? {
-        guard let today = try? TransactionDate(EditorDraft.dateText(.now)) else { return nil }
+        guard let today = try? TransactionDate(ReportingCalendar.dayText(at: .now)) else { return nil }
         return try? period.range(through: today,
-            customFrom: TransactionDate(EditorDraft.dateText(from)),
-            customThrough: TransactionDate(EditorDraft.dateText(through)))
+            customFrom: TransactionDate(ReportingCalendar.dayText(at: from)),
+            customThrough: TransactionDate(ReportingCalendar.dayText(at: through)))
     }
 
     private var visibleRecords: [LedgerTransaction] {
@@ -125,7 +125,9 @@ struct TransactionListView: View {
                     HStack {
                         DatePicker("From", selection: $from, displayedComponents: .date)
                         DatePicker("Through", selection: $through, displayedComponents: .date)
-                    }.padding(.horizontal, 16).padding(.bottom, 10)
+                    }.environment(\.calendar, ReportingCalendar.calendar)
+                        .environment(\.timeZone, ReportingCalendar.calendar.timeZone)
+                        .padding(.horizontal, 16).padding(.bottom, 10)
                 }
                 if range == nil {
                     Text("Choose a start date on or before the end date.").foregroundStyle(.red)
@@ -262,8 +264,7 @@ struct TransactionListView: View {
 
     private static func calendarDate(_ value: TransactionDate) -> Date {
         let parts = value.iso8601.split(separator: "-").map { Int($0)! }
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = .current
+        let calendar = ReportingCalendar.calendar
         return calendar.date(from: DateComponents(year: parts[0], month: parts[1], day: parts[2], hour: 12))!
     }
 
@@ -414,7 +415,7 @@ private struct TransactionTableRow: View {
         formatter.setLocalizedDateFormatFromTemplate("MMMd")
         return VStack(alignment: .leading, spacing: 2) {
             Text(formatter.string(from: date)).font(.caption)
-            if record.draft.date.iso8601.prefix(4) != EditorDraft.dateText(.now).prefix(4) {
+            if record.draft.date.iso8601.prefix(4) != ReportingCalendar.dayText(at: .now).prefix(4) {
                 Text(String(parts[0])).font(.caption2).foregroundStyle(.secondary)
             }
         }.accessibilityLabel(record.draft.date.iso8601)

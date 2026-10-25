@@ -76,10 +76,10 @@ enum DisplayPeriod: String, CaseIterable {
 
 struct DisplayScope {
     var period = DisplayPeriod.all
-    var from = Calendar.current.date(byAdding: .day, value: -56, to: .now)!
+    var from = ReportingCalendar.calendar.date(byAdding: .day, value: -56, to: .now)!
     var through = Date.now
 
-    var isValid: Bool { period != .custom || EditorDraft.dateText(from) <= EditorDraft.dateText(through) }
+    var isValid: Bool { period != .custom || ReportingCalendar.dayText(at: from) <= ReportingCalendar.dayText(at: through) }
 
     var selection: LedgerSelection {
         switch period {
@@ -90,15 +90,15 @@ struct DisplayScope {
         case .yearToDate: preset(.yearToDate)
         case .pastYear: preset(.pastYear)
         case .eightWeeks: LedgerSelection(
-            from: try? TransactionDate(EditorDraft.dateText(Calendar.current.date(byAdding: .day, value: -56, to: .now)!)),
-            through: try? TransactionDate(EditorDraft.dateText(.now)))
-        case .custom: LedgerSelection(from: try? TransactionDate(EditorDraft.dateText(from)),
-            through: try? TransactionDate(EditorDraft.dateText(through)))
+            from: try? TransactionDate(ReportingCalendar.dayText(at: ReportingCalendar.calendar.date(byAdding: .day, value: -56, to: .now)!)),
+            through: try? TransactionDate(ReportingCalendar.dayText(at: .now)))
+        case .custom: LedgerSelection(from: try? TransactionDate(ReportingCalendar.dayText(at: from)),
+            through: try? TransactionDate(ReportingCalendar.dayText(at: through)))
         }
     }
 
     private func preset(_ period: WorkspacePeriod) -> LedgerSelection {
-        guard let today = try? TransactionDate(EditorDraft.dateText(.now)), let range = try? period.range(through: today) else {
+        guard let today = try? TransactionDate(ReportingCalendar.dayText(at: .now)), let range = try? period.range(through: today) else {
             return LedgerSelection(from: try? TransactionDate("9999-12-31"), through: try? TransactionDate("0001-01-01"))
         }
         return LedgerSelection(from: range.from, through: range.through)
@@ -120,7 +120,11 @@ struct DisplayScopeControls: View {
         }
         if scope.period == .custom {
             DatePicker("From", selection: $scope.from, displayedComponents: .date)
+                .environment(\.calendar, ReportingCalendar.calendar)
+                .environment(\.timeZone, ReportingCalendar.calendar.timeZone)
             DatePicker("Through", selection: $scope.through, displayedComponents: .date)
+                .environment(\.calendar, ReportingCalendar.calendar)
+                .environment(\.timeZone, ReportingCalendar.calendar.timeZone)
             if !scope.isValid { Text("Choose a start date before the end date.").foregroundStyle(.red) }
         }
     }

@@ -1,5 +1,11 @@
 # Clipboard, summary refinement and private history trial
 
+**Real-data import is paused.** The user requires the entire financial framework
+before migration. The old trial/import instructions below are historical; do not
+generate or import real history using v1. Initial-history acceptance is blocked
+in the app. Start with [the audit/refund-partition request](chatgpt-import-audit-request.md)
+and [confirmed framework decisions](import-framework-decisions.md).
+
 2026-10-25. The user reports the previous Mac tests and an actual iCloud
 backup/download/restore passed. That report predates this batch. No real
 financial records, Sheet, collector connection or credentials were accessed here.
@@ -9,10 +15,10 @@ financial records, Sheet, collector connection or credentials were accessed here
 - Overview has four separate cards: bar chart, pie chart, category switches,
   and contextual purchases. The bottom cards scroll independently.
 - Timeline domains include empty calendar periods. Empty means no recorded
-  purchases in this view, not verified zero bank spending. Rolling date presets
-  retain their existing inclusive bounds: six rolling months can touch seven
-  calendar months when both end months are partial. The date window is not
-  silently shortened to match a bar count. Weeks use the first Monday date,
+  purchases in this view, not verified zero bank spending. The clarified six-month
+  preset includes the current partial month plus the five previous full months;
+  report today uses America/New_York and weeks start Monday. Other presets retain
+  their previous meanings. Weeks use the first Monday date,
   then `wk 2`, `wk 3`, etc.; full dates remain in selection menus/context.
 - Visibility lists only hidden categories/tags/transactions. Add Category/Add
   Tag opens a complete searchable picker. Individual hiding is in the transaction

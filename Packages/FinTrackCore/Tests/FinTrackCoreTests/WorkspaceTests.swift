@@ -153,9 +153,35 @@ private func workspaceAction(_ action: ReviewAction, _ record: LedgerTransaction
     #expect(try WorkspacePeriod.oneMonth.range(through: TransactionDate("2026-03-31")).from.iso8601 == "2026-02-28")
     #expect(try WorkspacePeriod.oneMonth.range(through: TransactionDate("2024-03-31")).from.iso8601 == "2024-02-29")
     #expect(try WorkspacePeriod.threeMonths.range(through: TransactionDate("2026-10-24")).from.iso8601 == "2026-07-24")
-    #expect(try WorkspacePeriod.sixMonths.range(through: TransactionDate("2026-10-24")).from.iso8601 == "2026-04-24")
+    #expect(try WorkspacePeriod.sixMonths.range(through: TransactionDate("2026-10-24")).from.iso8601 == "2026-05-01")
     #expect(try WorkspacePeriod.yearToDate.range(through: TransactionDate("2026-10-24")).from.iso8601 == "2026-01-01")
     #expect(try WorkspacePeriod.pastYear.range(through: TransactionDate("2024-02-29")).from.iso8601 == "2023-02-28")
+}
+
+@Test func sixMonthPresetIncludesExactlySixCalendarMonthsAcrossYearAndLeapBoundaries() throws {
+    let cases = [("2026-10-25", "2026-05-01"), ("2026-10-01", "2026-05-01"),
+                 ("2024-02-29", "2023-09-01"), ("2026-01-31", "2025-08-01")]
+    for (end, expectedStart) in cases {
+        let range = try WorkspacePeriod.sixMonths.range(through: TransactionDate(end))
+        #expect(range.from.iso8601 == expectedStart && range.through.iso8601 == end)
+        let report = try SummaryReport(records: [], catalog: .prototype, from: range.from, through: range.through)
+        #expect(report.periods.count == 6)
+        #expect(report.periods.first?.id == String(expectedStart.prefix(7)))
+        #expect(report.periods.last?.id == String(end.prefix(7)))
+    }
+    #expect(throws: LedgerError.invalidDate) { try WorkspacePeriod.sixMonths.range(through: TransactionDate("0001-01-01")) }
+}
+
+@Test func reportingTodayUsesNewYorkAcrossWinterAndSummerMidnightBoundaries() throws {
+    let formatter = ISO8601DateFormatter()
+    let samples = [("2026-01-01T04:30:00Z", "2025-12-31"), ("2026-01-01T05:30:00Z", "2026-01-01"),
+                   ("2026-07-01T03:30:00Z", "2026-06-30"), ("2026-07-01T04:30:00Z", "2026-07-01")]
+    for (timestamp, expectedDay) in samples {
+        let instant = try #require(formatter.date(from: timestamp))
+        #expect(ReportingCalendar.dayText(at: instant) == expectedDay)
+    }
+    #expect(ReportingCalendar.calendar.timeZone.identifier == "America/New_York")
+    #expect(ReportingCalendar.calendar.firstWeekday == 2)
 }
 
 @Test func customRangesAreInclusiveAndRejectMissingOrReversedBounds() throws {

@@ -1,5 +1,13 @@
 # Instructions for ChatGPT: migrate the household Sheet into FinTrack
 
+**PAUSED — v1 synthetic reference only. Do not use this format to generate the real
+migration.** The user now requires the full financial framework first, with
+merchant refunds deferred to a dedicated later import, current unresolved
+questions marked unapproved, New York/Monday reporting and six calendar months.
+Use [the next audit request](chatgpt-import-audit-request.md) instead. See
+[confirmed decisions and framework plan](import-framework-decisions.md).
+The JSON examples below remain decoder fixtures, not the revised final contract.
+
 Give this document to the finance-review ChatGPT conversation that can actually
 read your Sheet, or attach a private Sheet export there. Real financial files
 must stay outside the public FinTrack repository. This document contains only

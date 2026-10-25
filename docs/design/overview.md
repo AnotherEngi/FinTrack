@@ -2,6 +2,9 @@
 
 User decisions, 2026-10-25. This supersedes the earlier three-chart Overview.
 Latest refinements and current verification: [private trial guide](../real-data-trial.md).
+Clarified reporting settings: America/New_York, Monday week start, and six months
+from the first of the month five months before the report month through the report
+date. Thus October 25 selects May 1–October 25. See [import decisions](../import-framework-decisions.md).
 Implemented in source. The lifecycle follow-up passed all 108 portable tests on
 Windows and parsed all 18 Apple source/test files. Mac/iPad execution remains
 pending. The user now asks the agent to run all available local checks and supply

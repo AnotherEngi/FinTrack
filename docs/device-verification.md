@@ -1,5 +1,10 @@
 # Device verification record
 
+Latest calendar/pause follow-up: 121 portable tests pass and 19 native files parse
+on Windows. A Mac build and device check of six-month bounds, New York date
+pickers and the disabled initial-history action remain. Real migration is paused
+until the full framework passes; see [decisions](import-framework-decisions.md).
+
 Latest user report: prior Mac tests and actual iCloud backup/download/restore pass.
 The subsequent clipboard/summary/history-import batch passed 119 portable tests
 and syntax-parsed 19 Apple files on Windows. New native tests, UI/clipboard,

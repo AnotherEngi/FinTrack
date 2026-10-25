@@ -1,5 +1,12 @@
 # Exchange and backup hardening pass
 
+Latest user-decision follow-up blocks the app's initial-history action at both
+the preview button and view-model boundary, marks v1 migration instructions as
+synthetic-only, and preserves the new full-framework prerequisite. Reporting
+dates use explicit New York calendar defaults and six actual calendar months;
+121 portable tests pass, 19 native files parse. The broader model/contract work
+remains planned in [framework decisions](import-framework-decisions.md).
+
 Latest batch: [clipboard/summary/private trial](real-data-trial.md). All 119
 portable tests passed; 19 native files parsed. Reviewed strict migration fields,
 source row/column/total controls, explicit approval evidence, source-ID ambiguity,

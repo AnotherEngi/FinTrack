@@ -388,10 +388,11 @@ private struct HistoryImportPreview: View {
                     HistoryAuditView(audit: candidate.audit)
                     ForEach(Array(candidate.reviewWarnings.enumerated()), id: \.offset) { entry in Text(entry.element).font(.callout) }
                     Toggle("I compared source counts and totals and reviewed prior approvals, omissions and limitations", isOn: $reviewed)
+                    if let reason = ledger.historyImportBlockReason { Text(reason).font(.callout).foregroundStyle(.orange) }
                     Button("Import Into Separate Ledger") {
                         do { try ledger.importHistory(candidate); dismiss() }
                         catch { failure = error.localizedDescription }
-                    }.disabled(!reviewed)
+                    }.disabled(!reviewed || ledger.historyImportBlockReason != nil)
                 }
             }
             .navigationTitle("Review History Import")

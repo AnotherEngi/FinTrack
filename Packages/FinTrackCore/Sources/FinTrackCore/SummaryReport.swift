@@ -131,7 +131,7 @@ public struct SummaryReport: Sendable {
         if let from, let through, from > through { throw LedgerError.invalidDate }
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!
-        calendar.firstWeekday = 2
+        calendar.firstWeekday = ReportingCalendar.firstWeekday
         func date(_ value: TransactionDate) throws -> Date {
             let parts = value.iso8601.split(separator: "-").compactMap { Int($0) }
             guard parts.count == 3, let result = calendar.date(from: DateComponents(year: parts[0], month: parts[1], day: parts[2])) else {

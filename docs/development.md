@@ -1,5 +1,11 @@
 # Development and verification
 
+Latest clarification: [framework decisions](import-framework-decisions.md).
+Real migration is paused and initial-history acceptance blocked pending the full
+framework. Six months now uses the current month plus five full preceding months;
+report dates/pickers use New York and Monday weeks. All 121 portable tests passed;
+19 native files parsed. Native build/UI checks for these changes remain required.
+
 Latest clipboard/summary/history batch: [trial and verification guide](real-data-trial.md).
 **119 portable tests passed** on Windows Swift 6.4.1; **19** Apple files passed
 syntax parsing. Four new native regressions and the new UI/import/clipboard flows

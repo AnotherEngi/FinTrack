@@ -1,5 +1,11 @@
 # FinTrack requirements and implementation plan
 
+**Real migration paused pending the full import framework.** See the
+[supplied requirements snapshot](import-framework-requirements.md),
+[user-confirmed decisions and implementation sequence](import-framework-decisions.md),
+and [next ChatGPT audit request](chatgpt-import-audit-request.md). These supersede
+the earlier readiness for a limited real-data trial and v1 migration instructions.
+
 Latest batch: [clipboard/summary/private trial](real-data-trial.md), including the
 [ChatGPT Sheet migration instructions](chatgpt-history-migration.md). The user
 reports previous Mac tests and iCloud backup/download/restore passed. This batch

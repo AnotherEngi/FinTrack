@@ -20,6 +20,11 @@ final class LedgerViewModel {
     private(set) var preservedStores: [PreservedStore] = []
     var canExportBackup: Bool { repository != nil && startupFailure == nil }
     var message: String?
+    // Real history migration is paused by the user's full-framework prerequisite.
+    // Keep the v1 decoder available for synthetic regression/compatibility work.
+    var historyImportBlockReason: String? {
+        "History migration is paused until the full financial framework and revised import contract are implemented and validated. The current format is for synthetic development only."
+    }
 
     func saveSummaryVisibility(_ value: SummaryVisibility) {
         do {
@@ -92,7 +97,7 @@ final class LedgerViewModel {
     func loadTableSamples() {
         do {
             guard let repository else { throw LedgerError.recordNotFound }
-            let count = try repository.addSyntheticTableExamples(asOf: TransactionDate(EditorDraft.dateText(.now)))
+            let count = try repository.addSyntheticTableExamples(asOf: TransactionDate(ReportingCalendar.dayText(at: .now)))
             reload()
             message = count == 0 ? "Table examples already exist. Your edits were preserved."
                 : "Added \(count) fictional table examples. Existing records were preserved."
@@ -102,7 +107,7 @@ final class LedgerViewModel {
     func loadSpendingSamples() {
         do {
             guard let repository else { throw LedgerError.recordNotFound }
-            let count = try repository.addSyntheticSpendingExamples(asOf: TransactionDate(EditorDraft.dateText(.now)))
+            let count = try repository.addSyntheticSpendingExamples(asOf: TransactionDate(ReportingCalendar.dayText(at: .now)))
             reload()
             message = "Added \(count) fictional chart transactions. Existing records and edits were preserved."
         } catch { message = error.localizedDescription }
@@ -159,6 +164,7 @@ final class LedgerViewModel {
         try repository.stageIncoming(data); reload()
     }
     func importHistory(_ value: HistoryImport) throws {
+        if let reason = historyImportBlockReason { throw ExchangeError.invalid(reason) }
         let snapshot = try value.snapshot()
         if let previous = workspace.historyImport {
             if previous.id == value.id, previous.digest == snapshot.workspace.historyImport?.digest {
