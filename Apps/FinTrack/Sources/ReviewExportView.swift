@@ -342,7 +342,8 @@ private struct IncomingReviewView: View {
         }
         let changes = response.proposals.filter { proposal in
             guard let record = ledger.record(id: proposal.recordID) else { return false }
-            return proposal.changesClassification(of: record) || ledger.workspace.decidedProposals.contains(proposal.id)
+            let hasFields = proposal.categoryID != nil || proposal.tags != nil
+            return hasFields && (proposal.changesClassification(of: record) || ledger.workspace.decidedProposals.contains(proposal.id))
         }
         if !changes.isEmpty {
         Section("Proposed category and tag changes") {
@@ -389,8 +390,9 @@ private struct IncomingReviewView: View {
     private func displayAnswers(_ response: ReviewResponse) -> [DiscussionAnswer] {
         var answers = response.answers
         for proposal in response.proposals {
-            if let record = ledger.record(id: proposal.recordID),
-               !proposal.changesClassification(of: record), !ledger.workspace.decidedProposals.contains(proposal.id) {
+            guard let record = ledger.record(id: proposal.recordID) else { continue }
+            let plainReply = proposal.categoryID == nil && proposal.tags == nil
+            if plainReply || (!proposal.changesClassification(of: record) && !ledger.workspace.decidedProposals.contains(proposal.id)) {
                 answers.append(DiscussionAnswer(id: proposal.id, recordID: proposal.recordID,
                     expectedRevision: proposal.expectedRevision, text: proposal.rationale, questionForUser: proposal.question))
             }

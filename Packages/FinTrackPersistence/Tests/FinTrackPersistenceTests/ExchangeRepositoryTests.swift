@@ -7,6 +7,46 @@ import FinTrackCore
 private enum ExchangeWriteFailure: Error { case disk }
 
 @MainActor
+@Test func plainDiscussionRepliesCannotAcquireFinancialProposalDecisions() throws {
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let repository = try LocalTransactionRepository(storeURL: directory.appendingPathComponent("test.store"))
+    let record = try SyntheticTransactions.make()[0]
+    try repository.insert(record)
+    let packet = try repository.prepareReview(mode: .pending)
+    let explanation = ClassificationProposal(recordID: record.id, expectedRevision: String(record.revision),
+        rationale: "Fictional legacy explanation without an edit")
+    let response = ReviewResponse(packetID: packet.manifest.id, knowledgeVersion: packet.manifest.knowledgeVersion, proposals: [explanation])
+    try repository.stageIncoming(ExchangeJSON.encode(response))
+    for accept in [true, false] {
+        #expect(throws: (any Error).self) { try repository.decideProposal(fileID: response.id, proposalID: explanation.id, accept: accept) }
+    }
+    #expect(try repository.fetchAll().first == record)
+    #expect(try repository.workspace().decidedProposals.isEmpty)
+    #expect(try repository.workspace().discussion(for: record)?.answers.first?.text == explanation.rationale)
+}
+
+@MainActor
+@Test func futureDiscussionDraftIsRejectedButStaleDraftRemainsRecoverable() throws {
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let repository = try LocalTransactionRepository(storeURL: directory.appendingPathComponent("test.store"))
+    let record = try SyntheticTransactions.make()[0]
+    try repository.insert(record)
+    #expect(throws: LedgerError.staleRevision) {
+        try repository.saveDiscussionDraft(recordID: record.id, expectedRevision: record.revision + 1, text: "Fictional invalid revision")
+    }
+    #expect(try repository.workspace().discussionDrafts == nil)
+    var value = record.draft; value.notes = "Fictional new note"
+    _ = try repository.update(id: record.id, expectedRevision: record.revision, draft: value)
+    try repository.saveDiscussionDraft(recordID: record.id, expectedRevision: record.revision, text: "Fictional retained stale draft")
+    #expect(throws: LedgerError.staleRevision) {
+        try repository.replyToDiscussion(recordID: record.id, expectedRevision: record.revision, text: "Fictional retained stale draft")
+    }
+    #expect(try repository.workspace().discussionDrafts?[record.id.uuidString]?.expectedRevision == String(record.revision))
+}
+
+@MainActor
 @Test func discussionReplyDraftReopensAndReplyAndResolutionPreserveApproval() throws {
     let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: directory) }

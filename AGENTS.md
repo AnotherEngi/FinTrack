@@ -110,6 +110,17 @@ does not change the requirement to keep financial data and credentials private.
 
 ## Implementation guidance
 
+### Command execution preference
+
+The user authorized the current additional hardening pass and one final GitHub
+push. After that exception is completed, **provide human-run commands only**.
+Do not execute shell/terminal commands (including tests, Git commits, or pushes)
+on the user's behalf without an explicit additional exception. Earlier permission
+to push this implementation does not carry forward to subsequent work. This is a
+user instruction, not an inferred approval requirement from a skill.
+
+### Implementation state
+
 - Latest iPad feedback: all populated category/tag values have colored review
   pills, including older unknown provenance (orange needs review; keep stored
   origin unknown). Blue is user-edited and green approved. The earlier neutral
@@ -187,10 +198,10 @@ does not change the requirement to keep financial data and credentials private.
 
 ## Validation and environment
 
-- Current review/backup/discussion/chart batch: all **77** portable tests pass on Windows Swift
+- Current review/backup/discussion/chart batch: all **83** portable tests pass on Windows Swift
   6.4.1. Hardening results are recorded
   in docs/device-verification.md. Fourteen Apple source/test files pass Windows
-  syntax parsing only. There are 25 Apple persistence tests (four new in this UX follow-up); run them
+  syntax parsing only. There are 27 Apple persistence tests (two added by the final hardening pass); the user runs them
   and the Xcode build on Mac. Verify iCloud permission, metadata confirmation,
   retries, and full restore on iPad before real data. The older test counts below
   are historical evidence, not validation of schema V3 or cloud backup.

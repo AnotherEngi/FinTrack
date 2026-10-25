@@ -31,7 +31,7 @@ Follow [current review/discussion flow](review-flow.md). Current source adds:
    drilldowns, negative refunds, and gaps rather than zero-filled missing months.
 
 Automatic iCloud upload/restore checks below still apply unchanged. Current Apple
-suite has 25 tests; its four new discussion/draft/receipt/example cases and the new
+suite has 27 tests; its discussion/draft/receipt/example and final hardening cases plus the new
 SwiftUI/Charts/Files save controls need Mac/iPad validation. Keep the same bundle ID.
 
 Source batch: 2026-10-24. **Synthetic data only.** This replaces the old three-file

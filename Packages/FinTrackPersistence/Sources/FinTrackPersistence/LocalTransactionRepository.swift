@@ -268,6 +268,9 @@ public final class LocalTransactionRepository: TransactionRepository {
         guard !workspace.decidedProposals.contains(proposalID) else { return }
         var updated: LedgerTransaction?
         if let proposal = response.proposals.first(where: { $0.id == proposalID }) {
+            guard proposal.categoryID != nil || proposal.tags != nil else {
+                throw ExchangeError.invalid("Discussion answers have no accept or reject action. Read or reply in Discussions.")
+            }
             if accept {
                 guard workspace.drafts[proposal.recordID.uuidString] == nil else { throw LedgerError.unfinishedDraft }
                 guard let stored = try row(id: proposal.recordID) else { throw LedgerError.recordNotFound }
@@ -351,7 +354,8 @@ public final class LocalTransactionRepository: TransactionRepository {
         guard text.count <= 10_000, expectedRevision > 0 else {
             throw ExchangeError.invalid("Use a reply of up to 10,000 characters.")
         }
-        guard try row(id: recordID) != nil else { throw LedgerError.recordNotFound }
+        guard let stored = try row(id: recordID) else { throw LedgerError.recordNotFound }
+        guard expectedRevision <= (try stored.value().revision) else { throw LedgerError.staleRevision }
         var workspace = try self.workspace()
         let value = text.isEmpty ? nil : DiscussionDraft(recordID: recordID, expectedRevision: String(expectedRevision), text: text)
         guard workspace.discussionDrafts?[recordID.uuidString] != value else { return }

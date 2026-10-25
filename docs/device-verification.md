@@ -4,6 +4,13 @@ Updated 2026-10-24. All device checks use synthetic transactions.
 
 ## Current review/intake/backup batch
 
+Final additional hardening pass: **83 portable tests pass**, all **14** Apple
+files parse, and **27** Apple persistence tests await Mac execution. Core guards
+now reject explanation-only/no-op edits, failed preparation leaves state intact,
+and backup validation rejects future discussion revisions/out-of-packet scopes
+while preserving valid stale drafts. The reply editor also retains local input
+across reappearance and resets its base revision after an explicit discard.
+
 Latest UX follow-up: the user reports uncolored unapproved fields, confusing
 question/suggestion semantics, prepared-file ambiguity, apparent backup-export
 no-op, and missing spending visualizations in the running iPad app. They selected
@@ -24,11 +31,11 @@ packages/app have not yet been rerun/reported. Preserve the existing store.
 
 | Check | Result | Evidence / required next step |
 | --- | --- | --- |
-| Portable rules and regression suite | Pass, agent executed | All 77 Swift Testing tests pass on Windows Swift 6.4.1; 12 new discussion/color/chart/privacy/compatibility tests in this follow-up |
+| Portable rules and regression suite | Pass, agent executed | All 83 Swift Testing tests pass on Windows Swift 6.4.1; 12 UX regressions plus six additional hardening tests |
 | Apple source syntax | Pass, agent executed | All 14 app/persistence source/test files parse; no Apple SDK types/macros checked |
 | Xcode project references / scheme | Pass, static only | Unique/defined object IDs, all ten app sources referenced, scheme XML valid; Mac plutil/build still needed |
 | Synthetic weekly fixture / whitespace | Pass, agent executed | JSON parsed, diff check clean; no financial accounts/files used |
-| Mac persistence suite / schema V3 | Pending | 25 authored tests, four new discussion/draft/receipt/fixture tests; migration and native integration need Mac execution |
+| Mac persistence suite / schema V3 | Pending | 27 authored tests, including two final hardening cases; migration and native integration need the user's Mac run |
 | Automatic packet / ChatGPT round trip | Implemented in source, pending device check | One file, pending/open context, full history, returned receipt/proposals, explicit acceptance and stale/replay protection |
 | Weekly source intake / guidance | Implemented in source, pending native check | Atomic new-row batches, genuine scoped IDs, explicit reconciliation, guidance edits and version conflicts |
 | Automatic iCloud backup | Implemented in source, unverified on device | One-time folder permission, durable candidate/retries, uploaded metadata confirmation; independently inspect cloud contents |

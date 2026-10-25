@@ -16,8 +16,8 @@ replaces Questions; replies/resolution/drafts are durable, with a question colum
 in Transactions. Send/Import/Backup pages are separate, prepared files lock and
 identify their mode, and manual full-backup export opens Files independently.
 Import records matching acknowledgements automatically; only actual record
-changes offer Apply changes/Keep current. Current verification: 77 portable tests
-pass; 14 Apple files parse, 25 Apple persistence tests await Mac execution.
+changes offer Apply changes/Keep current. Current verification: 83 portable tests
+pass; 14 Apple files parse, 27 Apple persistence tests await Mac execution.
 Confirmed constraints below come from the user. Proposed designs remain open until
 selected; documentation verification does not establish account or device access.
 
@@ -444,7 +444,7 @@ export/confirmed restore is supplementary; restore preserves a local recovery co
 Backups include drafts and exchange state, but no permission bookmarks/credentials.
 
 See [review/backup guide](chatgpt-export.md), [combined device test](ipad-acceptance.md),
-and [hardening report](hardening.md). All 77 portable tests pass on Windows; 25
+and [hardening report](hardening.md). All 83 portable tests pass on Windows; 27
 Apple persistence tests and the app build/upload/restore await Mac/iPad validation.
 The 50 MB file limit fails visibly without truncation. Full taxonomy, splits,
 reimbursements, automatic cloud transport to ChatGPT, and real-history migration

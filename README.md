@@ -76,12 +76,13 @@ iPad; do not uninstall or delete its store to resolve a migration failure. No
 CloudKit capability is required for the user-selected iCloud Drive folder.
 
 Windows can run `scripts/Test-Core.ps1` with the installed Swift/VS tools. Windows
-verification for this batch: all **77** portable tests pass; all 14 Apple source/
+verification for this batch: all **83** portable tests pass; all 14 Apple source/
 test files pass syntax parsing.
 Windows
 cannot typecheck SwiftUI/SwiftData or verify iCloud behavior. The Apple persistence
-suite has 25 tests, including four new discussion/draft/receipt/example cases, awaiting
+suite has 27 tests, including two final hardening cases, awaiting
 this batch's Mac run. See [verification](docs/device-verification.md).
 
-Keep financial records and credentials out of this public repository. The agent
-has not committed or pushed these changes.
+Keep financial records and credentials out of this public repository. After the
+authorized final hardening push, terminal/Git commands are provided for the user
+to run unless the user explicitly grants another execution exception.

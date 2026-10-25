@@ -4,7 +4,7 @@
 request. Current source replaces routine selected-range export with automatic
 pending-work/full-history packets, staged results/weekly intake, explicit proposals
 and receipts, editable guidance, automatic iCloud folder backup, and full restore.
-All 77 portable tests pass; Apple build, V3 migration, and cloud/device behavior
+All 83 portable tests pass; Apple build, V3 migration, and cloud/device behavior
 await validation. See [current guide](chatgpt-export.md), [hardening](hardening.md),
 and [combined acceptance](ipad-acceptance.md). The design rationale below remains;
 its initial-state table is historical, not the present implementation status.

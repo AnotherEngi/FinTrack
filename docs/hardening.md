@@ -1,5 +1,38 @@
 # Exchange and backup hardening pass
 
+## Additional final pass requested by the user
+
+Completed 2026-10-24 after the discussion/chart follow-up. All **83** portable
+tests pass with Windows Swift 6.4.1; all **14** Apple source/test files parse.
+Two more Apple persistence regressions bring that suite to **27**, pending Mac.
+
+Findings corrected:
+
+- Explanation-only and unchanged classification proposals could still be applied
+  through the domain API, despite being hidden by the UI. The core now rejects
+  them. Plain discussion replies cannot acquire financial accept/reject decisions;
+  legacy already-decided explanations stay readable without showing empty edits.
+- Failed review preparation could modify a directly used workspace before
+  throwing. Preparation now commits its copied state only after success; empty
+  and duplicate-record failures preserve baseline, feedback, and manifests.
+- Backup discussion revisions could exceed their ledger record, and a manifest's
+  discussion scope could reference records outside that packet. Reject these
+  invalid archives/drafts while retaining legitimate older-revision reply drafts.
+- Reappearing reply editors could reload over locally held input. Draft loading
+  is now once per presentation; explicitly discarding a draft resets its revision
+  to the current record, and invalid revision metadata exposes the rebase action.
+
+Six new portable regressions cover these boundaries and late old replies; two
+Apple tests cover rejected reply decisions and future/stale draft persistence.
+The cloud confirmation/previous-file preservation code was reread; no cloud
+mechanism, capabilities, or billing changes were made. Actual iCloud upload,
+SwiftData semantics, SwiftUI/Charts, and file-provider behavior remain unverified
+without Mac/iPad execution. No new real data or credentials were accessed.
+
+The user requested human-run commands only after this final authorized push.
+Future command execution and Git publication require another explicit exception;
+the preference is recorded in AGENTS.md. Earlier counts below are historical.
+
 ## Latest iPad-feedback follow-up
 
 All **77** portable tests pass; **14** Apple source/test files parse. There are

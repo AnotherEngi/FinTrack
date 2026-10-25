@@ -98,6 +98,7 @@ struct DiscussionDetailView: View {
     @State private var showExchange = false
     @State private var showEditor = false
     @State private var notice: String?
+    @State private var draftLoaded = false
 
     private var record: LedgerTransaction? { ledger.record(id: recordID) }
     private var thread: DiscussionThread? { record.flatMap { ledger.discussions[$0.id] } }
@@ -148,7 +149,9 @@ struct DiscussionDetailView: View {
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() }.disabled(draftWriteFailed) } }
-            .onAppear { loadDraft() }
+            .onAppear {
+                if !draftLoaded { loadDraft(); draftLoaded = true }
+            }
             .onChange(of: reply) { _, _ in persistDraft() }
             .interactiveDismissDisabled(draftWriteFailed)
             .sheet(isPresented: $showExchange) { ReviewExportView(ledger: ledger, showsDone: true) }
@@ -164,7 +167,7 @@ struct DiscussionDetailView: View {
     @ViewBuilder private func replySection(_ record: LedgerTransaction) -> some View {
         Section(thread == nil ? "Your question" : "Your reply") {
             TextField("Write to ChatGPT", text: $reply, axis: .vertical).lineLimit(3...10)
-            if let baseRevision, baseRevision != record.revision, !reply.isEmpty {
+            if baseRevision != record.revision, !reply.isEmpty {
                 Text("The transaction changed while this draft was open. Your reply is preserved; review the latest transaction before saving.").foregroundStyle(.orange)
                 Button("Use Latest Transaction for This Reply") { self.baseRevision = record.revision; persistDraft() }
             }
@@ -179,7 +182,10 @@ struct DiscussionDetailView: View {
             Button("Prepare Review for ChatGPT", systemImage: "square.and.arrow.up") { showExchange = true }
             if !reply.isEmpty {
                 Button("Discard Reply Draft", role: .destructive) {
-                    attempt { try ledger.saveDiscussionDraft(recordID: recordID, expectedRevision: record.revision, text: ""); reply = ""; draftWriteFailed = false }
+                    attempt {
+                        try ledger.saveDiscussionDraft(recordID: recordID, expectedRevision: record.revision, text: "")
+                        baseRevision = record.revision; reply = ""; draftWriteFailed = false
+                    }
                 }
             }
             if draftWriteFailed { Button("Retry Saving Draft") { persistDraft() } }

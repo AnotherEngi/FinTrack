@@ -354,6 +354,14 @@ public struct ReviewWorkspace: Codable, Sendable {
 
     public mutating func prepare(records: [LedgerTransaction], catalog: ReviewCatalog,
                                  mode: ReviewMode, at: Date = .now) throws -> ReviewEnvelope {
+        var candidate = self
+        let envelope = try candidate.prepareSnapshot(records: records, catalog: catalog, mode: mode, at: at)
+        self = candidate
+        return envelope
+    }
+
+    private mutating func prepareSnapshot(records: [LedgerTransaction], catalog: ReviewCatalog,
+                                         mode: ReviewMode, at: Date) throws -> ReviewEnvelope {
         establishBaseline(records: records)
         let threads = discussions(in: records)
         let open = Set(threads.filter { !$0.isResolved && $0.status != .draft }.map(\.recordID))
@@ -536,6 +544,9 @@ public struct ReviewWorkspace: Codable, Sendable {
 extension LedgerTransaction {
     public func applyingSuggestion(_ proposal: ClassificationProposal, catalog: ReviewCatalog) throws -> Self {
         guard proposal.recordID == id, proposal.expectedRevision == String(revision) else { throw LedgerError.staleRevision }
+        guard proposal.changesClassification(of: self) else {
+            throw ExchangeError.invalid("This reply proposes no category or tag changes. Read it in Discussions.")
+        }
         var value = draft
         if let category = proposal.categoryID {
             guard catalog.category(id: category) != nil else { throw ReviewError.unresolvedCategory }
@@ -584,17 +595,20 @@ public struct FullBackup: Codable, Sendable {
             throw ExchangeError.invalid("The backup is invalid or has an unsupported version/convention.")
         }
         let ids = Set(records.map(\.id))
+        let revisions = Dictionary(uniqueKeysWithValues: records.map { ($0.id, $0.revision) })
         let replies = workspace.discussionReplies ?? []
         guard Set(replies.map(\.id)).count == replies.count else { throw ExchangeError.invalid("Duplicate discussion reply IDs in backup.") }
         for reply in replies {
             guard ids.contains(reply.recordID), let revision = Int64(reply.sentRevision), revision > 0,
-                  String(revision) == reply.sentRevision, !reply.text.isEmpty, reply.text.count <= 10_000 else {
+                  revision <= (revisions[reply.recordID] ?? 0), String(revision) == reply.sentRevision,
+                  !reply.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, reply.text.count <= 10_000 else {
                 throw ExchangeError.invalid("Invalid discussion reply in backup.")
             }
         }
         for (key, draft) in workspace.discussionDrafts ?? [:] {
             guard key == draft.recordID.uuidString, ids.contains(draft.recordID),
                   let revision = Int64(draft.expectedRevision), revision > 0, String(revision) == draft.expectedRevision,
+                  revision <= (revisions[draft.recordID] ?? 0),
                   draft.text.count <= 10_000 else { throw ExchangeError.invalid("Invalid discussion draft in backup.") }
         }
         for key in (workspace.resolvedDiscussions ?? [:]).keys {
@@ -609,6 +623,11 @@ public struct FullBackup: Codable, Sendable {
                   manifest.recordRevisions.allSatisfy({ key, value in
                       UUID(uuidString: key) != nil && Int64(value).map { $0 > 0 && String($0) == value } == true
                   }) else { throw ExchangeError.invalid("Invalid backup review manifest.") }
+            let discussionIDs = manifest.discussionRecordIDs ?? []
+            guard Set(discussionIDs).count == discussionIDs.count,
+                  discussionIDs.allSatisfy({ manifest.recordRevisions[$0.uuidString] != nil }) else {
+                throw ExchangeError.invalid("Backup discussion scope is outside its review manifest.")
+            }
         }
         guard workspace.knowledge.count <= 1_000, workspace.knowledge.allSatisfy({
             !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && $0.text.count <= 10_000
