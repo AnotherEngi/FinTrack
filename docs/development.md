@@ -2,6 +2,15 @@
 
 ## Current financial framework (2026-10-25)
 
+2026-10-26 current product change: the user reports corrected Mac tests/build pass
+and authorized enabling the normal history/refund import actions for complete
+iPad validation. The unconditional gate is removed; existing audit confirmation,
+validation, isolated restore, receipt/revision checks and atomic persistence remain.
+This does not add fixture resources, a test mode, new schema or a one-off checklist.
+Use synthetic inputs for device acceptance, then reconcile the source privately
+before real intake. Rebuild this update on Mac before installation; older gate
+descriptions below are historical. See [the current trial](real-data-trial.md).
+
 The framework now has one current domain/store schema and current version-2
 contracts per purpose. Prototype readers, schema migration chains, old draft
 conversion and base64 backup-journal conversion were removed. Incompatible data

@@ -5,6 +5,13 @@ Confirmed by the user on 2026-10-25 following review of
 requirements are prerequisites for the real migration. This document records the
 user's exceptions/clarifications and takes precedence where they differ.
 
+2026-10-26 update: the user reports corrected Mac tests/build pass and authorized
+enabling the normal import actions before the remaining acceptance work. The
+unconditional application gate is removed so the synthetic UI trial is runnable;
+all validation/confirmation remains. Complete device/backup checks and private
+source reconciliation before real intake. Earlier references here to keeping
+the app action blocked are superseded; no fixture-only path is requested.
+
 ## Confirmed decisions
 
 1. **Require the full framework before real import.** Read-only preservation of

@@ -1,8 +1,11 @@
 # Current financial-framework trial
 
-**Real migration remains paused.** This revision replaces prototype formats and
-must pass native/device validation first. Earlier Mac/iCloud passes were for the
-previous model. Do not use old v1 migration files or old development backup readers.
+The user reports that the corrected Mac tests and app build pass. The normal
+initial-history and deferred-refund import actions are now enabled, allowing
+current-contract synthetic files to complete preview, confirmation, commitment
+and replay testing. There is no fixture-only path or test switch. Actual real-data
+intake should wait for device/backup verification and private source reconciliation.
+Do not use old v1 migration files or old development backup readers.
 
 1. Publish/pull the current batch and run the commands and combined synthetic
    checks in [framework-validation.md](framework-validation.md). Keep private
@@ -11,9 +14,9 @@ previous model. Do not use old v1 migration files or old development backup read
    reports the retired development database. No automatic conversion or reset is
    performed. Verify current-format iCloud upload/download/restore for all new
    structures, not merely a scalar transaction amount.
-3. Report the new native and device results. After acceptance, enable the current
-   migration preview and prove the provided synthetic initial/refund pair end to
-   end. This keeps the validation gate honest before introducing private records.
+3. Prove the provided synthetic initial/refund pair end to end through the normal
+   enabled import actions, including replay without duplicates. Report the new
+   native and device results before introducing private records.
 4. Give your finance-review ChatGPT workflow the
    [new migration request](chatgpt-history-migration.md),
    [current contracts and examples](contracts/financial-framework.md), and your
@@ -34,3 +37,12 @@ Clipboard cap is 256 KiB, with complete JSON-file fallback up to 50 MiB. Full
 current archives use a separate framed `.fintrack` path. Nothing is silently
 truncated or split into independent partial histories. Keep the original workbook
 privately yourself; FinTrack does not manage it.
+
+The existing one-initial-history-per-ledger protection remains. Before the
+synthetic initial import, save a full checkpoint of the starting ledger that has
+no initial-history receipt. After completing the synthetic trial, restore that
+pre-import checkpoint before importing the real initial history. Restore activates
+a separate verified store; the synthetic ledger remains preserved. An identical
+history replay is a no-op, and a changed/different initial migration is still
+rejected in a ledger whose initial history is already established. No synthetic
+record or test setting should be merged into the real history.

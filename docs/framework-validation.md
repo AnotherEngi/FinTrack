@@ -6,6 +6,35 @@ schema migrations. No private source/audit data was used. No commit or push was 
 
 ## Evidence and limits
 
+### 2026-10-26 normal import actions enabled
+
+The user reports that corrected Mac tests and the app build pass. They explicitly
+authorized removing the unconditional application gate before validating the next
+build, so the required synthetic history/refund trial can actually finish. The
+normal current-contract import flow is enabled; this is not a fixture allowance
+or a test mode. No one-off test script is being added to the repository.
+
+Initial history still requires its audit acknowledgement and explicit Import
+Into Separate Ledger confirmation. The current format and financial graph are
+validated before isolated restore; existing migration receipts prevent overwrite
+or duplicate import. Refunds still require explicit Import Reviewed Refunds and
+pass the existing migration-ID, exact deferred-set, purchase-revision, currency,
+allocation-cap, replay and atomic-write checks. The audit view's excluded-row
+count now uses current row dispositions rather than a removed property.
+
+The remaining rollout sequence is: recheck/build this change on Mac, install on
+iPad, verify editing/exchange/iCloud recovery, run synthetic initial/refund/weekly
+intake through the normal UI, and reconcile the actual source privately before
+real intake. The older reports and gate descriptions below are historical.
+
+Agent verification of the enabled flow's source: **139 portable tests passed**
+on Windows Swift 6.4.1 (exit **0**, 21.931 seconds execution), **19 native Swift
+files passed syntax parsing**, and `git diff --check` passed. No additional test
+mode, resource bundle, fixture-specific code or schema change was introduced.
+The native package suite, SwiftUI typecheck/build and iPad confirmation/file flows
+must still run on Mac/iPad for this update. Windows syntax parsing is not an
+Apple build. No real financial files were inspected and no commit/push was run.
+
 ### 2026-10-26 Mac test report and follow-up
 
 The user's screenshots show **137 core tests passed on Mac** and the native
@@ -141,10 +170,10 @@ format if requested. Old development archives are deliberately rejected.
 5. Send pending feedback and full history via clipboard/file. Confirm structured
    allocations/global financial context/source evidence, separate answers and
    explicit actual-edit acceptance, stale edit rejection and closure cleanup.
-6. Keep the initial real-data gate closed. Portable/native tests exercise synthetic
-   initial/refund contracts directly. After native acceptance report results to
-   enable the user-facing migration preview for a synthetic end-to-end trial,
-   then review the real producer audit privately before authorizing real intake.
+6. Use the enabled normal import actions to complete the published synthetic
+   initial/refund pair end to end, including replays and weekly intake. Review
+   the real producer audit privately before actual real-data intake. Do not
+   reintroduce an application gate that blocks this prerequisite synthetic trial.
 7. With the new structures saved, confirm iCloud upload, export/download a current
    `.fintrack` archive, make another edit, restore the downloaded checkpoint and
    verify all financial objects, pending drafts/feedback and source evidence.

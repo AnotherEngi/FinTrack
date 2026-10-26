@@ -143,7 +143,8 @@ private struct TransferForm: View {
                 if let history = ledger.workspace.historyImport {
                     Section("History migration audit") {
                         Text(history.sourceName)
-                        Text("\(history.recordIDs.count) imported rows; \(history.audit.excludedRows.count) excluded source rows.")
+                        let excludedCount = history.audit.rows.filter { $0.disposition == .excluded }.count
+                        Text("\(history.recordIDs.count) imported rows; \(excludedCount) excluded source rows.")
                         DisclosureGroup("Column mapping, omissions and warnings") { HistoryAuditView(audit: history.audit) }
                     }
                 }
@@ -176,9 +177,7 @@ private struct TransferForm: View {
                     Form {
                         Text("Dedicated deferred refund import: \(candidate.records.count) refunds. Gross purchases will be reduced only for explicitly linked, attributed amounts.")
                         ForEach(candidate.records) { record in LedgerRecordRow(record: record, catalog: ledger.catalog) }
-                        if let reason = ledger.historyImportBlockReason { Text(reason).foregroundStyle(.orange) }
                         Button("Import Reviewed Refunds") { attempt { try ledger.importRefunds(candidate); refundCandidate = nil } }
-                            .disabled(ledger.historyImportBlockReason != nil)
                     }.toolbar { Button("Cancel") { refundCandidate = nil } }
                 }
             }
@@ -401,11 +400,10 @@ private struct HistoryImportPreview: View {
                     HistoryAuditView(audit: candidate.audit)
                     ForEach(Array(candidate.reviewWarnings.enumerated()), id: \.offset) { entry in Text(entry.element).font(.callout) }
                     Toggle("I compared source counts and totals and reviewed prior approvals, omissions and limitations", isOn: $reviewed)
-                    if let reason = ledger.historyImportBlockReason { Text(reason).font(.callout).foregroundStyle(.orange) }
                     Button("Import Into Separate Ledger") {
                         do { try ledger.importHistory(candidate); dismiss() }
                         catch { failure = error.localizedDescription }
-                    }.disabled(!reviewed || ledger.historyImportBlockReason != nil)
+                    }.disabled(!reviewed)
                 }
             }
             .navigationTitle("Review History Import")

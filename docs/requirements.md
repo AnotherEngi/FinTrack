@@ -5,10 +5,16 @@ Current 2026-10-25 source and acceptance evidence:
 [current contracts and synthetic examples](contracts/financial-framework.md), and
 [full data inventory/retention](data-retention.md). Splits, subcategories,
 programs, claims, repayments and lifecycle evidence are structured in source;
-Mac/device validation for this model remains pending. Retired development
+The user reports corrected Mac tests and the app build pass; device validation
+remains pending. Retired development
 readers/schema migrations have been removed. Before a future architecture-breaking
 change, ask what must be preserved before choosing multiple revisions/adapters.
-Real initial/refund migration remains blocked until this revision's acceptance.
+2026-10-26: the user authorized enabling the normal initial-history/refund import
+actions so the complete flow can be tested on iPad. All validation and explicit
+review/confirmation remain; no fixture restriction or test bypass is added. Use
+synthetic data for that acceptance pass and reconcile the private source before
+actual real-data intake. This rollout sequence replaces the unconditional code
+gate that previously prevented synthetic acceptance itself.
 Earlier prototype capability/status descriptions below are historical.
 
 **Pre-release architecture policy:** obsolete development formats do not require
@@ -17,7 +23,7 @@ one current contract per purpose. Before a future breaking change, ask the user
 what data/objects must survive before deciding on multiple revisions or migration
 support. See [the revised plan](import-framework-decisions.md) and AGENTS.md.
 
-**Real migration paused pending the full import framework.** See the
+**Historical full-framework prerequisite (now implemented in source).** See the
 [supplied requirements snapshot](import-framework-requirements.md),
 [user-confirmed decisions and implementation sequence](import-framework-decisions.md),
 and [next ChatGPT audit request](chatgpt-import-audit-request.md). These supersede

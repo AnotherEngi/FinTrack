@@ -5,7 +5,11 @@
 migration chain. A version number rejects incompatible data; it does not promise
 compatibility. Ask the user what must survive before a future breaking change.
 
-Real migration remains blocked until this revision passes Mac and iPad acceptance.
+Normal history/refund import actions are enabled for current-contract files, with
+preview and explicit user confirmation. The 2026-10-26 product fix removes the
+unconditional application gate so synthetic end-to-end validation can run. Actual
+real-data intake should follow successful iPad/backup checks and private source
+reconciliation. No schema revision, fixture allowlist or validation bypass is added.
 The examples are invented fixtures, not a template containing private values.
 The importer validates a received payload; it cannot prove that every source cell
 was inspected. Private independent source controls are still required.

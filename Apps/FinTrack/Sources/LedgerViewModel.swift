@@ -20,18 +20,11 @@ final class LedgerViewModel {
     private(set) var preservedStores: [PreservedStore] = []
     var canExportBackup: Bool { repository != nil && startupFailure == nil }
     var message: String?
-    // Real history migration is paused by the user's full-framework prerequisite.
-    // One current format. Enable real migration only after the framework acceptance checks.
-    var historyImportBlockReason: String? {
-        "Real history and deferred-refund migration are paused until this financial-framework revision passes Mac package tests, an Xcode build and the physical-iPad backup/restore checks. Use synthetic development data only."
-    }
-
     func saveFinancialSettings(_ value: FinancialContext, categories: [ReviewCategory]) throws {
         guard let repository else { throw LedgerError.recordNotFound }
         try repository.saveFinancialSettings(value, categories: categories); reload()
     }
     func importRefunds(_ value: RefundImport) throws {
-        if let reason = historyImportBlockReason { throw ExchangeError.invalid(reason) }
         guard let repository else { throw LedgerError.recordNotFound }
         try repository.acceptRefundImport(value); reload()
     }
@@ -175,7 +168,6 @@ final class LedgerViewModel {
         try repository.stageIncoming(data); reload()
     }
     func importHistory(_ value: HistoryImport) throws {
-        if let reason = historyImportBlockReason { throw ExchangeError.invalid(reason) }
         let snapshot = try value.snapshot()
         if let previous = workspace.historyImport {
             if previous.id == value.id, previous.digest == snapshot.workspace.historyImport?.digest {

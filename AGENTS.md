@@ -23,8 +23,15 @@ The current source implements the financial framework described in
 [framework decisions](docs/import-framework-decisions.md). It replaces retired
 development formats with one current domain model, one SwiftData schema, current
 drafts, and one contract per purpose. Format version 2 does not imply a v1 reader.
-Real history/refund migration is still blocked pending this revision's Mac/iPad
-acceptance. Do not enable it based solely on Windows tests or older device results.
+The user authorized enabling the normal history/refund import actions on
+2026-10-26 so physical-iPad synthetic import validation can be completed. The
+unconditional application gate has been removed; preview, audit acknowledgement,
+explicit confirmation, validation, isolated history restore, atomic writes,
+revision checks and replay protection remain. This is the normal product flow,
+without a fixture allowlist or test mode. Keep actual real-data intake until
+device/backup checks and private source reconciliation pass; that is the rollout
+sequence, not a software gate that prevents its own prerequisite tests. Do not
+reinstate that circular dependency.
 See [framework validation](docs/framework-validation.md) for exact current evidence
 and remaining checks, and [retention](docs/data-retention.md) for the data inventory.
 
@@ -44,6 +51,18 @@ mutable restore local. No financial behavior/schema/contract changed. **139 core
 tests now pass on Windows**, **19 native files parse**, and `git diff --check`
 passes. The corrected native tests, app build and device checks still need their
 Mac/iPad run; keep real migration gated. No commit/push for this follow-up.
+
+Subsequent 2026-10-26 user report: the corrected Mac tests and app build pass.
+The user then explicitly approved removing the import gate before validating the
+resulting build. That current decision supersedes historical gate instructions
+above/below. The earlier one-off checklist/fixture-only code was undone; do not
+recreate it. Give manual test walkthroughs in the conversation when requested.
+Recheck the current product change on Mac and iPad; the preceding report does not
+validate later edits. No schema, contract, migration reader or signing change is
+part of enabling these existing actions.
+Validation for this product change: all **139 portable tests passed** on Windows
+Swift 6.4.1, **19 native files parsed**, and `git diff --check` passed. Mac/native
+UI validation of this update remains pending. No commit or push performed.
 
 ## Required behavior and financial decisions
 
