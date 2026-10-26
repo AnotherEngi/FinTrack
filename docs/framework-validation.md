@@ -6,6 +6,37 @@ schema migrations. No private source/audit data was used. No commit or push was 
 
 ## Evidence and limits
 
+### 2026-10-26 Mac test report and follow-up
+
+The user's screenshots show **137 core tests passed on Mac** and the native
+persistence package built successfully. The native run completed **47 tests**
+with **three assertion issues in two tests**:
+
+- The refund rollback test compared the committed normalized import against its
+  pre-import fixture. Initial history intentionally changes a completed
+  discussion's question state from `none` to `resolved`. The corrected test
+  captures the actual committed baseline and compares all records and workspace
+  data after injected failure, both in the existing context and a reopened store.
+  It still checks successful retry, duplicate prevention, unchanged replay
+  generation and preservation of the purchase.
+- The discussion test still expected approval after replying and resolving.
+  The agreed behavior is unapproved after a new discussion, remaining unapproved
+  on resolution until an explicit Approve. The corrected test checks earlier
+  approval evidence, user answer and reopen persistence, then explicit reapproval.
+
+The unused mutable `workspace` local in restore was removed to fix the compiler
+warning. No financial behavior, schema, contract or import gate changed. Two
+portable regressions exercise the underlying normalization and review semantics.
+Agent verification after correction: **139 portable tests passed** on Windows
+Swift 6.4.1 with process exit **0** (27.344 seconds execution), **19 native Swift
+source/test files parsed**, and `git diff --check` passed. Windows cannot run
+SwiftData, so these are not corrected-native-suite results.
+The corrected **native suite still needs a Mac rerun**; a successful Windows
+regression run cannot establish native rollback/reopen results. Real migration
+remains blocked.
+
+### Earlier Windows framework baseline
+
 Windows Swift 6.4.1: the final complete portable suite passed **137 tests** with
 exit code **0** after the hardening pass (21.763 seconds for test execution).
 All **19** native app/persistence source and test files passed syntax parsing.

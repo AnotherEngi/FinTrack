@@ -1,5 +1,13 @@
 # Exchange and backup hardening pass
 
+2026-10-26 persistence-test follow-up: corrected stale refund rollback and
+discussion approval expectations from the user's Mac run. Rollback now compares
+the entire saved ledger/workspace baseline in memory and after database reopen;
+discussion resolution must preserve prior approval evidence without creating
+current approval. Removed the unused mutable restore local. Two portable
+regressions cover normalization and explicit reapproval semantics. See
+[validation](framework-validation.md) for current results and pending native rerun.
+
 Current financial-framework pass: [validation and capability matrix](framework-validation.md).
 The new pass removes prototype compatibility, validates current typed graphs and
 nested incoming keys, rejects essential omissions/missing preserved cells and

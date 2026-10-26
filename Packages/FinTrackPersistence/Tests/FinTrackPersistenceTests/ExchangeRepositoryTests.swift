@@ -47,7 +47,7 @@ private enum ExchangeWriteFailure: Error { case disk }
 }
 
 @MainActor
-@Test func discussionReplyDraftReopensAndReplyAndResolutionPreserveApproval() throws {
+@Test func discussionReplyDraftReopensAndResolutionRequiresExplicitReapproval() throws {
     let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: directory) }
     let url = directory.appendingPathComponent("test.store")
@@ -55,18 +55,30 @@ private enum ExchangeWriteFailure: Error { case disk }
     let original = try SyntheticTransactions.make()[0]
     try repository.insert(original)
     let approved = try repository.perform(ReviewRequest(transactionID: original.id, expectedRevision: original.revision, action: .approve))
+    let earlierApproval = try #require(approved.reviewHistory.first { $0.request.action == .approve })
     try repository.saveDiscussionDraft(recordID: original.id, expectedRevision: approved.revision, text: "Fictional reply in progress")
     let reopened = try LocalTransactionRepository(storeURL: url)
     #expect(try reopened.workspace().discussionDrafts?[original.id.uuidString]?.text == "Fictional reply in progress")
     try reopened.replyToDiscussion(recordID: original.id, expectedRevision: approved.revision, text: "Fictional household supplies")
     let replied = try #require(reopened.fetchAll().first)
-    #expect(replied.approval == .confirmed)
+    #expect(replied.approval == .unreviewed)
+    #expect(replied.discussionRequested)
+    #expect(replied.reviewHistory.contains(earlierApproval))
     #expect(try reopened.workspace().discussionDrafts?[original.id.uuidString] == nil)
     #expect(try reopened.workspace().discussionReplies?.count == 1)
     try reopened.resolveDiscussion(recordID: replied.id, expectedRevision: replied.revision)
     let resolved = try #require(reopened.fetchAll().first)
-    #expect(resolved.approval == .confirmed)
+    #expect(resolved.approval == .unreviewed)
+    #expect(!resolved.discussionRequested && resolved.draft.questionState == .resolved)
+    #expect(resolved.reviewHistory.contains(earlierApproval))
+    #expect(resolved.draft.answer == "Fictional household supplies")
     #expect(try reopened.workspace().discussion(for: resolved)?.isResolved == true)
+    let verified = try LocalTransactionRepository(storeURL: url)
+    #expect(try verified.fetchAll().first == resolved)
+    let reapproved = try verified.perform(ReviewRequest(transactionID: resolved.id,
+        expectedRevision: resolved.revision, action: .approve))
+    #expect(reapproved.approval == .confirmed)
+    #expect(reapproved.reviewHistory.contains(earlierApproval))
 }
 
 @MainActor

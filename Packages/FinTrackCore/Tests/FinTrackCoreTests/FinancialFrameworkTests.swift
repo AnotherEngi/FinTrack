@@ -355,3 +355,39 @@ func frameworkRefund(_ history: HistoryImport) throws -> RefundImport {
     #expect(workspace.discussion(for: updated)?.originalQuestion == "New classification question?")
     #expect(workspace.discussion(for: updated)?.answers.isEmpty == true)
 }
+
+@Test func initialImportResolvesCompletedDiscussionWithoutChangingApprovedFinancialFacts() throws {
+    let category = ReviewCategory(id: "fictional-food", label: "Fictional Food")
+    let purchase = try LedgerTransaction(draft: .init(date: .init("2026-03-01"), payee: "Fictional Market",
+        amount: .init(minorUnits: 1234), notes: "User's preserved note", treatment: .spending, categoryID: category.id), approval: .confirmed)
+    let rows = [MigrationRow(locator: "Fiction!2", disposition: .active, recordID: purchase.id, source: "Fiction", tab: "Fiction", treatment: .spending, amount: purchase.draft.amount)]
+    let history = HistoryImport(sourceName: "Synthetic normalization check", records: [purchase], categories: [category],
+        audit: .init(columns: [.init(name: "Fiction!Amount", handling: "mapped", target: .amount, explanation: "Exact cents")], rows: rows, controls: try HistoryAudit.calculate(rows: rows, records: [purchase])))
+    let imported = try #require(history.snapshot().records.first)
+    #expect(purchase.draft.questionState == .none && imported.draft.questionState == .resolved)
+    var expectedDraft = purchase.draft; expectedDraft.questionState = .resolved
+    #expect(imported.draft == expectedDraft)
+    #expect(imported.id == purchase.id && imported.revision == purchase.revision)
+    #expect(imported.createdAt == purchase.createdAt && imported.updatedAt == purchase.updatedAt)
+    #expect(imported.approval == .confirmed && imported.classificationProvenance == purchase.classificationProvenance)
+    #expect(imported.reviewHistory == purchase.reviewHistory)
+}
+
+@Test func resolvingANewDiscussionRetainsEarlierApprovalEvidenceButDoesNotReapprove() throws {
+    let history = try frameworkImport(); let original = history.records[0]
+    let catalog = try ReviewCatalog(categories: history.categories)
+    let approved = try original.applying(.init(transactionID: original.id, expectedRevision: original.revision, action: .approve), catalog: catalog)
+    let earlierApproval = try #require(approved.reviewHistory.first { $0.request.action == .approve })
+    var draft = approved.draft; draft.answer = "Fictional new question"
+    let edited = try approved.revising(with: draft, expectedRevision: approved.revision)
+    let discussed = try edited.applying(.init(transactionID: edited.id, expectedRevision: edited.revision, action: .discuss), catalog: catalog)
+    #expect(discussed.approval == .unreviewed && discussed.discussionRequested)
+    let resolved = try discussed.applying(.init(transactionID: discussed.id, expectedRevision: discussed.revision, action: .resolveDiscussion), catalog: catalog)
+    #expect(resolved.approval == .unreviewed && !resolved.discussionRequested)
+    #expect(resolved.draft.questionState == .resolved && resolved.draft.answer == draft.answer)
+    #expect(resolved.reviewHistory.contains(earlierApproval))
+    let restored = try StrictJSON.decode(LedgerTransaction.self, from: ExchangeJSON.encode(resolved))
+    #expect(restored == resolved)
+    let reapproved = try restored.applying(.init(transactionID: restored.id, expectedRevision: restored.revision, action: .approve), catalog: catalog)
+    #expect(reapproved.approval == .confirmed && reapproved.reviewHistory.contains(earlierApproval))
+}

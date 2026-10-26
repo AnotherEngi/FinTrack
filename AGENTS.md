@@ -35,6 +35,15 @@ Latest agent-run verification: **137 portable tests passed** on Windows Swift
 6.4.1, **19 native source/test files parsed**, and `git diff --check` passed.
 The **47 native test declarations** and app/device/iCloud runtime checks remain
 unrun here because Apple frameworks/Xcode are unavailable. No commit/push performed.
+2026-10-26 follow-up supersedes those counts/status: the user supplied Mac output
+with **137 core tests passing** and the native persistence package building, then
+**47 persistence tests completing with three assertion issues in two tests**.
+Corrected the stale pre-import rollback baseline and discussion approval
+expectations, strengthened saved-state/reopen checks, and removed the unused
+mutable restore local. No financial behavior/schema/contract changed. **139 core
+tests now pass on Windows**, **19 native files parse**, and `git diff --check`
+passes. The corrected native tests, app build and device checks still need their
+Mac/iPad run; keep real migration gated. No commit/push for this follow-up.
 
 ## Required behavior and financial decisions
 

@@ -97,25 +97,39 @@ private func historyStoreSnapshot() throws -> FullBackup {
     let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: directory) }
     var fail = false
-    let repository = try LocalTransactionRepository(storeURL: directory.appendingPathComponent("refunds.store"), commit: { if fail { throw HistoryDiskFailure.disk }; try $0.save() })
+    let storeURL = directory.appendingPathComponent("refunds.store")
+    let repository = try LocalTransactionRepository(storeURL: storeURL, commit: { if fail { throw HistoryDiskFailure.disk }; try $0.save() })
     let purchase = try #require(historyStoreSnapshot().records.first)
     let refundID = UUID()
     let rows = [MigrationRow(locator: "Fiction!2", disposition: .active, recordID: purchase.id, source: "Fiction", tab: "Fiction", treatment: .spending, amount: purchase.draft.amount),
         MigrationRow(locator: "Fiction!3", disposition: .deferredRefund, recordID: refundID, source: "Fiction", tab: "Fiction", treatment: .refund, amount: .init(minorUnits: -100))]
     let history = HistoryImport(sourceName: "Synthetic only", records: [purchase], categories: try historyStoreSnapshot().workspace.importedCategories!,
         audit: .init(columns: [.init(name: "Fiction!Amount", handling: "mapped", target: .amount, explanation: "Exact cents")], rows: rows, controls: try HistoryAudit.calculate(rows: rows, records: [purchase])))
-    try repository.restore(history.snapshot())
+    let initial = try history.snapshot()
+    try repository.restore(initial)
+    // Initial import normalizes completed discussions. Rollback must preserve
+    // the committed ledger, not reproduce the pre-import draft's question state.
+    let baseline = try repository.backup()
+    #expect(baseline.records == initial.records)
+    #expect(baseline.records.first?.draft.questionState == .resolved)
     let refund = try LedgerTransaction(id: refundID, draft: .init(date: .init("2026-06-12"), payee: "Fictional refund", amount: .init(minorUnits: -100), treatment: .refund,
         categoryID: "fictional-food", refundAllocations: [.init(purchaseID: purchase.id, amount: .init(minorUnits: 100))]))
     let value = RefundImport(migrationID: history.id, records: [refund], locators: ["Fiction!3"], purchaseRevisions: [purchase.id.uuidString: String(purchase.revision)])
     fail = true
     #expect(throws: HistoryDiskFailure.self) { try repository.acceptRefundImport(value) }
-    #expect(try repository.fetchAll() == [purchase] && repository.workspace().refundImports.isEmpty)
+    let rolledBack = try repository.backup()
+    #expect(rolledBack.records == baseline.records)
+    #expect(rolledBack.workspace.refundImports.isEmpty)
+    #expect(try ExchangeJSON.encode(rolledBack.workspace) == ExchangeJSON.encode(baseline.workspace))
+    let reopenedAfterFailure = try LocalTransactionRepository(storeURL: storeURL).backup()
+    #expect(reopenedAfterFailure.records == baseline.records)
+    #expect(try ExchangeJSON.encode(reopenedAfterFailure.workspace) == ExchangeJSON.encode(baseline.workspace))
     fail = false; try repository.acceptRefundImport(value)
     let generation = try repository.workspace().generation
     try repository.acceptRefundImport(value)
     #expect(try repository.fetchAll().count == 2 && repository.workspace().refundImports.count == 1)
     #expect(try repository.workspace().generation == generation)
+    #expect(try repository.fetchAll().first { $0.id == purchase.id } == baseline.records.first)
 }
 
 @MainActor @Test func migratedCategoriesReopenAndNewWeeklyRowsUseTheSameTaxonomy() throws {

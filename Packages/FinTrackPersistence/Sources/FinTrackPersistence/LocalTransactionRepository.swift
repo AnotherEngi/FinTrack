@@ -623,8 +623,7 @@ public final class LocalTransactionRepository: TransactionRepository {
                     try stored.apply(record)
                 } else { context.insert(try Row(record)) }
             }
-            var workspace = backup.workspace
-            try writeWorkspace(workspace)
+            try writeWorkspace(backup.workspace)
         }
         } catch { catalog = previousCatalog; throw error }
     }
