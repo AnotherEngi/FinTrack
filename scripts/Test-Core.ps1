@@ -1,7 +1,8 @@
 [CmdletBinding()]
-param()
+param([ValidateSet('test', 'build')][string]$Action = 'test')
 
 $ErrorActionPreference = 'Stop'
+$env:Path = [Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User') + ';' + $env:Path
 $repoDirectory = Split-Path -Parent $PSScriptRoot
 $vswhereExe = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
 if (Test-Path -LiteralPath $vswhereExe) {
@@ -16,5 +17,5 @@ if (-not $swiftCommand) {
     throw 'Swift is not on PATH. Reopen your terminal after setup, or run Setup-WindowsSwift.ps1 -Install first.'
 }
 & $swiftCommand.Source --version
-& $swiftCommand.Source test --package-path (Join-Path $repoDirectory 'Packages\FinTrackCore')
+& $swiftCommand.Source $Action --package-path (Join-Path $repoDirectory 'Packages\FinTrackCore')
 if ($LASTEXITCODE -ne 0) { throw ('Core tests failed: ' + $LASTEXITCODE) }

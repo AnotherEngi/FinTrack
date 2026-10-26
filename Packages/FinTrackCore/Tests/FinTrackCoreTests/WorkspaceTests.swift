@@ -85,28 +85,7 @@ private func workspaceAction(_ action: ReviewAction, _ record: LedgerTransaction
     }
 }
 
-@Test func earlierDomainPayloadKeepsUnknownOriginsAndSourceWithoutGuessing() throws {
-    let discussed = try workspaceAction(.discuss, workspaceRecord())
-    var json = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(discussed)) as? [String: Any])
-    json.removeValue(forKey: "classificationProvenance")
-    json.removeValue(forKey: "discussionProgress")
-    var draft = try #require(json["draft"] as? [String: Any])
-    draft.removeValue(forKey: "source")
-    json["draft"] = draft
-    let old = try JSONDecoder().decode(LedgerTransaction.self, from: JSONSerialization.data(withJSONObject: json))
-    #expect(old.draft.source == nil)
-    #expect(old.classificationProvenance == .init())
-    #expect(old.discussionProgress == .awaitingExport)
-    #expect(old.revision == discussed.revision)
-    #expect(old.reviewHistory == discussed.reviewHistory)
-    var note = old.draft
-    note.notes = "Only a note change"
-    let edited = try old.revising(with: note, expectedRevision: old.revision)
-    #expect(edited.classificationProvenance.category == .unknown)
-    #expect(edited.classificationProvenance.tags["Original tag"] == .unknown)
-}
-
-@Test func discussionProgressRequiresExplicitUserActionAndPreservesApproval() throws {
+@Test func discussionProgressRequiresExplicitUserActionAndRevokesCurrentApproval() throws {
     let record = try workspaceAction(.approve, workspaceRecord())
     #expect(throws: ReviewError.discussionNotRequested) { try workspaceAction(.markDiscussionInProgress, record) }
     let discussed = try workspaceAction(.discuss, record)
@@ -114,7 +93,7 @@ private func workspaceAction(_ action: ReviewAction, _ record: LedgerTransaction
     let request = ReviewRequest(transactionID: record.id, expectedRevision: discussed.revision, action: .markDiscussionInProgress)
     let reviewing = try discussed.applying(request, catalog: .prototype)
     #expect(reviewing.discussionProgress == .reviewingInChatGPT)
-    #expect(reviewing.approval == .confirmed)
+    #expect(reviewing.approval == .unreviewed)
     #expect(try reviewing.applying(request, catalog: .prototype) == reviewing)
     let reopened = try workspaceAction(.reopen, reviewing)
     #expect(reopened.discussionProgress == nil)
@@ -258,14 +237,4 @@ private func workspaceAction(_ action: ReviewAction, _ record: LedgerTransaction
     #expect(records.contains { $0.discussionProgress == .reviewingInChatGPT })
     let range = try WorkspacePeriod.oneMonth.range(through: TransactionDate("2026-10-24"))
     #expect(LedgerSelection(from: range.from, through: range.through).records(in: records).count == 8)
-}
-
-@Test func oldRawDraftDoesNotInventASourceOrChangeOwnership() throws {
-    let data = Data(#"{"dateText":"2026-10-24","payee":"Invented","amountText":"12."}"#.utf8)
-    var input = try JSONDecoder().decode(TransactionInput.self, from: data)
-    #expect(input.sourceLabel.isEmpty)
-    input.amountText = "12.34"
-    #expect(try input.value().source == nil)
-    let manual = ClassificationProvenance.manual(try input.value())
-    #expect(manual.category == .unknown)
 }

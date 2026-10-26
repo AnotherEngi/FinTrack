@@ -43,7 +43,7 @@ public struct ClassificationProvenance: Codable, Equatable, Sendable {
 
     func afterManualEdit(from old: TransactionDraft, to new: TransactionDraft) -> Self {
         Self(category: new.categoryID == nil ? .unknown
-                : new.categoryID != old.categoryID ? .user : category,
+                : (new.categoryID != old.categoryID || new.primarySubcategoryID != old.primarySubcategoryID) ? .user : category,
             tags: Dictionary(uniqueKeysWithValues: new.tags.map { tag in
                 (tag, old.tags.contains(tag) ? tags[tag] ?? .unknown : .user)
             }))

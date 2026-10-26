@@ -33,20 +33,6 @@ public struct DiscussionDraft: Codable, Equatable, Sendable {
     }
 }
 
-public struct DiscussionBoundary: Codable, Equatable, Sendable {
-    public let question: String
-    public let notes: String
-    public let answer: String
-    public let lastRequestID: UUID?
-    public let answerIDs: [UUID]
-    public let replyIDs: [UUID]
-    public init(record: LedgerTransaction, answers: [DiscussionAnswer], replies: [UserDiscussionReply]) {
-        question = record.assistantContext.question; notes = record.draft.notes; answer = record.draft.answer
-        lastRequestID = record.reviewHistory.last(where: { $0.request.action == .discuss })?.id
-        answerIDs = answers.map(\.id); replyIDs = replies.map(\.id)
-    }
-}
-
 public enum DiscussionStatus: String, Codable, Sendable {
     case draft, awaitingYou, readyToSend, waitingForChatGPT, responseReceived, resolved
 }
@@ -73,6 +59,8 @@ extension ClassificationProposal {
     public func changesClassification(of record: LedgerTransaction) -> Bool {
         if let categoryID, categoryID != record.draft.categoryID { return true }
         if let tags, Set(tags) != Set(record.draft.tags) { return true }
+        if let primarySubcategoryID, primarySubcategoryID != (record.draft.primarySubcategoryID ?? "") { return true }
+        if let allocations, allocations != record.draft.allocations { return true }
         return false
     }
 }
@@ -131,24 +119,6 @@ extension ReviewWorkspace {
         var answers = cachedAnswers
         for response in responses {
             answers.append(contentsOf: response.answers.filter { $0.recordID == record.id })
-            // Compatibility: older exports had no answer channel, so explanations
-            // and follow-up questions were incorrectly wrapped as proposals.
-            for proposal in response.proposals where proposal.recordID == record.id {
-                let manifest = manifests.first { $0.id == response.packetID }
-                let sentRevision = Int64(proposal.expectedRevision) ?? 0
-                let intent = record.reviewHistory.last { $0.appliedRevision <= sentRevision
-                    && ($0.request.action == .discuss || $0.request.action == .resolveDiscussion) }
-                let legacyRequested = intent.map { $0.request.action == .discuss }
-                    ?? (record.discussionRequested || !record.assistantContext.question.isEmpty
-                        || record.reviewHistory.contains { $0.request.action == .resolveDiscussion && $0.appliedRevision > sentRevision })
-                let sentForDiscussion = manifest?.discussionRecordIDs?.contains(record.id) ?? legacyRequested
-                let isDiscussion = (proposal.categoryID == nil && proposal.tags == nil)
-                    || proposal.question?.isEmpty == false || sentForDiscussion
-                if isDiscussion {
-                    answers.append(DiscussionAnswer(id: proposal.id, recordID: record.id,
-                        expectedRevision: proposal.expectedRevision, text: proposal.rationale, questionForUser: proposal.question))
-                }
-            }
         }
         // A late reply to an older packet remains readable without replacing
         // the current question/direction. Retain import order for equal revisions.
@@ -169,14 +139,16 @@ extension ReviewWorkspace {
         }
         let closed = isDiscussionClosed(for: record) && !answers.contains { (Int64($0.expectedRevision) ?? 0) > closedRevision }
         if closed { answers = [] }
-        let question = closed ? "" : record.assistantContext.question.trimmingCharacters(in: .whitespacesAndNewlines)
+        let supplied = ([record.assistantContext.question] + record.draft.sourceNotes.filter { $0.ownership == .assistantQuestion }.map(\.text))
+            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }.joined(separator: "\n")
+        let fallback = [.open, .unknown].contains(record.draft.questionState) ? "The source marks a question as open or unknown. Review this transaction and clarify or resolve it." : ""
+        let question = closed ? "" : (supplied.isEmpty ? fallback : supplied)
         let hasHistory = record.reviewHistory.contains { $0.request.action == .discuss || $0.request.action == .resolveDiscussion }
         let hasDraft = discussionDrafts?[record.id.uuidString] != nil
         guard record.discussionRequested || !question.isEmpty || !answers.isEmpty || !replies.isEmpty
-            || hasHistory || hasDraft || resolvedDiscussions?[record.id.uuidString] != nil
+            || hasHistory || hasDraft
             || discussionClosedRevisions?[record.id.uuidString] != nil else { return nil }
-        let boundary = DiscussionBoundary(record: record, answers: answers, replies: replies)
-        let resolved = !hasDraft && (closed || resolvedDiscussions?[record.id.uuidString] == boundary)
+        let resolved = !hasDraft && closed
         let latestAnswerRevision = answers.compactMap { Int64($0.expectedRevision) }.max() ?? 0
         let latestReplyRevision = replies.compactMap { Int64($0.sentRevision) }.max() ?? 0
         let needsUser = answers.last?.questionForUser?.isEmpty == false

@@ -35,13 +35,15 @@ extension ReviewWorkspace {
     public func isDiscussionClosed(for record: LedgerTransaction) -> Bool {
         let closed = discussionClosureRevision(for: record)
         let request = record.reviewHistory.last { $0.request.action == .discuss }?.appliedRevision ?? 0
+        if record.revision > closed && ([QuestionState.open, .unknown].contains(record.draft.questionState)
+            || !record.assistantContext.question.isEmpty
+            || record.draft.sourceNotes.contains { $0.ownership == .assistantQuestion && !$0.text.isEmpty }) { return false }
         return closed > 0 && request <= closed
     }
 
     public mutating func closeDiscussion(for record: LedgerTransaction) {
         if discussionClosedRevisions == nil { discussionClosedRevisions = [:] }
         discussionClosedRevisions?[record.id.uuidString] = String(record.revision)
-        resolvedDiscussions?.removeValue(forKey: record.id.uuidString)
     }
 
     /// No age-based deletion of unfinished financial work. Completed files are
@@ -58,9 +60,6 @@ extension ReviewWorkspace {
         let originalReceiptCount = importReceipts?.count ?? 0
         var responsePackets: [UUID: UUID] = [:]
         let threads = discussions(in: records)
-        for thread in threads where thread.isResolved && resolvedDiscussions?[thread.recordID.uuidString] != nil {
-            if let record = byID[thread.recordID] { closeDiscussion(for: record) }
-        }
         let retainedAnswers = threads.filter { !$0.isResolved }.flatMap(\.answers)
         if !retainedAnswers.isEmpty || discussionAnswers != nil { discussionAnswers = retainedAnswers }
         let retainedReplies = (discussionReplies ?? []).filter { reply in
@@ -128,7 +127,7 @@ extension ReviewWorkspace {
         discussionAnswers = discussions(in: records).filter { !$0.isResolved }.flatMap(\.answers)
         let response = file.purpose == "fintrack-review-response" ? try ExchangeJSON.decode(ReviewResponse.self, from: file.data) : nil
         let weekly = file.purpose == "fintrack-weekly-intake" ? try ExchangeJSON.decode(WeeklyBatch.self, from: file.data) : nil
-        let decisions = response.map { $0.proposals.filter { $0.categoryID != nil || $0.tags != nil }.map(\.id) + $0.knowledgeProposals.map(\.id) } ?? []
+        let decisions = response.map { $0.proposals.filter { $0.categoryID != nil || $0.tags != nil || $0.primarySubcategoryID != nil || $0.allocations != nil }.map(\.id) + $0.knowledgeProposals.map(\.id) } ?? []
         let receipt = ImportReceipt(file: file, response: response, disposition: "dismissed", decisionIDs: decisions,
             reportedCoverage: weekly?.coverage, rowCount: weekly?.transactions.count, at: at)
         if importReceipts == nil { importReceipts = [] }; importReceipts?.append(receipt)

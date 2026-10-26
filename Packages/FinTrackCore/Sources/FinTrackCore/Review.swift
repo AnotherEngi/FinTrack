@@ -1,16 +1,16 @@
 import Foundation
 
 public enum PostingStatus: String, Codable, CaseIterable, Sendable {
-    case posted, pending, unresolved
+    case posted, pending, unresolved, superseded
 }
 
 public enum TransactionTreatment: String, Codable, CaseIterable, Sendable {
-    case spending, refund, income, payment, statementCredit, transfer, unresolved
+    case spending, refund, reimbursementReceipt, income, payment, statementCredit, transfer, unresolved
 
     public var contributesToSpending: Bool { self == .spending || self == .refund }
     public var excludedFromReview: Bool {
         switch self {
-        case .income, .payment, .statementCredit, .transfer: true
+        case .income, .payment, .statementCredit, .transfer, .reimbursementReceipt: true
         case .spending, .refund, .unresolved: false
         }
     }
@@ -18,11 +18,6 @@ public enum TransactionTreatment: String, Codable, CaseIterable, Sendable {
 
 public enum ApprovalStatus: String, Codable, Sendable {
     case unreviewed, confirmed, notApplicable
-}
-
-/// Preserved prototype metadata; this is never promoted to classification approval.
-public enum LegacyReviewStatus: String, Codable, Sendable {
-    case needsReview, reviewed
 }
 
 public struct AssistantContext: Codable, Equatable, Sendable {
@@ -38,16 +33,23 @@ public struct AssistantContext: Codable, Equatable, Sendable {
 }
 
 public struct ReviewCategory: Codable, Equatable, Identifiable, Sendable {
-    public let id: String
-    public let label: String
-    public let unresolved: Bool
-    public let excluded: Bool
+    public var id: String
+    public var label: String
+    public var unresolved: Bool
+    public var excluded: Bool
+    public var storedLabel: String
+    public var definition: SourceValue
+    public var origin: ValueOrigin
+    public var subcategories: [ReviewSubcategory]
 
-    public init(id: String, label: String, unresolved: Bool = false, excluded: Bool = false) {
+    public init(id: String, label: String, unresolved: Bool = false, excluded: Bool = false,
+                storedLabel: String? = nil, definition: SourceValue = .unknown, origin: ValueOrigin = .unknown,
+                subcategories: [ReviewSubcategory] = []) {
         self.id = id
         self.label = label
         self.unresolved = unresolved
         self.excluded = excluded
+        self.storedLabel = storedLabel ?? label; self.definition = definition; self.origin = origin; self.subcategories = subcategories
     }
 }
 
@@ -55,12 +57,22 @@ public struct ReviewCatalog: Sendable {
     public let categories: [ReviewCategory]
 
     public init(categories: [ReviewCategory]) throws {
-        guard Set(categories.map(\.id)).count == categories.count,
+        guard !categories.isEmpty, categories.count <= 1_000, Set(categories.map(\.id)).count == categories.count,
               categories.allSatisfy({ !$0.id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                   && !$0.label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) else {
             throw ReviewError.invalidCatalog
         }
         self.categories = categories
+        for category in categories {
+            try category.definition.validate()
+            try requireFinance(category.label.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() != "mixed", "Use a primary category and explicit dollar allocations; do not create a Mixed category.")
+            try requireFinance(category.id.count <= 120 && category.label.count <= 200 && category.subcategories.count <= 1_000
+                && Set(category.subcategories.map(\.id)).count == category.subcategories.count, "Invalid category/subcategory catalog.")
+            for subcategory in category.subcategories {
+                try requireFinance(!subcategory.id.isEmpty && subcategory.id.count <= 120 && !subcategory.label.isEmpty, "Invalid subcategory.")
+                try subcategory.definition.validate()
+            }
+        }
     }
 
     public func category(id: String?) -> ReviewCategory? {
@@ -93,6 +105,18 @@ public struct ReviewRequest: Codable, Equatable, Identifiable, Sendable {
         self.expectedRevision = expectedRevision
         self.action = action
     }
+    private enum CodingKeys: String, CodingKey { case id, transactionID, expectedRevision, action }
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let text = try c.decode(String.self, forKey: .expectedRevision)
+        guard let revision = Int64(text), revision > 0, String(revision) == text else { throw LedgerError.invalidRevision }
+        self.init(id: try c.decode(UUID.self, forKey: .id), transactionID: try c.decode(UUID.self, forKey: .transactionID), expectedRevision: revision, action: try c.decode(ReviewAction.self, forKey: .action))
+    }
+    public func encode(to encoder: any Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id); try c.encode(transactionID, forKey: .transactionID)
+        try c.encode(String(expectedRevision), forKey: .expectedRevision); try c.encode(action, forKey: .action)
+    }
 }
 
 public struct ReviewDecision: Codable, Equatable, Identifiable, Sendable {
@@ -105,6 +129,17 @@ public struct ReviewDecision: Codable, Equatable, Identifiable, Sendable {
         self.request = request
         self.appliedRevision = appliedRevision
         self.createdAt = createdAt
+    }
+    private enum CodingKeys: String, CodingKey { case request, appliedRevision, createdAt }
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let text = try c.decode(String.self, forKey: .appliedRevision)
+        guard let revision = Int64(text), revision > 0, String(revision) == text else { throw LedgerError.invalidRevision }
+        self.init(request: try c.decode(ReviewRequest.self, forKey: .request), appliedRevision: revision, createdAt: try c.decode(Date.self, forKey: .createdAt))
+    }
+    public func encode(to encoder: any Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(request, forKey: .request); try c.encode(String(appliedRevision), forKey: .appliedRevision); try c.encode(createdAt, forKey: .createdAt)
     }
 }
 

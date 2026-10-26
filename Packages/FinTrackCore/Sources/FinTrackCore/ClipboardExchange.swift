@@ -29,7 +29,7 @@ public enum ClipboardExchange {
         let data = Data(value.utf8)
         struct Header: Decodable { let schemaVersion: Int; let purpose: String }
         let header = try ExchangeJSON.decode(Header.self, from: data)
-        guard header.schemaVersion == 1, ["fintrack-review-response", "fintrack-weekly-intake", "fintrack-history-import"].contains(header.purpose) else {
+        guard header.schemaVersion == FinancialFormat.version, ["fintrack-review-response", "fintrack-weekly-intake", "fintrack-history-import", "fintrack-refund-import"].contains(header.purpose) else {
             throw ExchangeError.invalid("Paste a FinTrack reply, weekly intake, or history import. Backup restore uses a file.")
         }
         return data

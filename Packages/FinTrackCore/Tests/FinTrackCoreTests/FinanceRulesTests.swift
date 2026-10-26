@@ -69,7 +69,7 @@ import Testing
     #expect(try JSONDecoder().decode(LedgerTransaction.self, from: data) == record)
     let decodedObject = try JSONSerialization.jsonObject(with: data)
     var object = try #require(decodedObject as? [String: Any])
-    object["revision"] = 0
+    object["revision"] = "0"
     let invalid = try JSONSerialization.data(withJSONObject: object)
     #expect(throws: LedgerError.invalidRevision) {
         try JSONDecoder().decode(LedgerTransaction.self, from: invalid)

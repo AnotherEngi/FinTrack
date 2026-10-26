@@ -60,7 +60,7 @@ struct QuestionsView: View {
                                 if thread.status == .draft {
                                     Text("Reply draft saved on this iPad. Open it to continue.")
                                 } else if thread.status == .awaitingYou, let question = thread.questionForUser {
-                                    Text("ChatGPT asks: " + question).lineLimit(3)
+                                    Text("Question: " + question).lineLimit(3)
                                 } else if let answer = thread.answers.last {
                                     Text("ChatGPT: " + answer.text).lineLimit(3)
                                 } else if !thread.userQuestion.isEmpty { Text("You asked: " + thread.userQuestion).lineLimit(3) }
@@ -116,7 +116,7 @@ struct DiscussionDetailView: View {
                     }
                     if let thread {
                         if !thread.userQuestion.isEmpty { Section("You asked ChatGPT") { Text(thread.userQuestion).textSelection(.enabled) } }
-                        if !thread.originalQuestion.isEmpty { Section("ChatGPT asked you") { Text(thread.originalQuestion).textSelection(.enabled) } }
+                        if !thread.originalQuestion.isEmpty { Section("Question to review") { Text(thread.originalQuestion).textSelection(.enabled) } }
                         if !record.draft.answer.isEmpty, thread.replies.isEmpty {
                             Section("Your saved answer") { Text(record.draft.answer).textSelection(.enabled) }
                         }

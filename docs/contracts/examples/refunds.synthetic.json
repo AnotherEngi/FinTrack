@@ -1,0 +1,88 @@
+{
+  "id" : "26206672-3D22-4A35-993C-082944B1FDCC",
+  "locators" : [
+    "Ledger!5"
+  ],
+  "migrationID" : "80000000-0000-4000-8000-000000000008",
+  "purchaseRevisions" : {
+    "60000000-0000-4000-8000-000000000006" : "1"
+  },
+  "purpose" : "fintrack-refund-import",
+  "records" : [
+    {
+      "approval" : "unreviewed",
+      "assistantContext" : {
+        "ledgerNotes" : "",
+        "question" : "",
+        "reason" : ""
+      },
+      "classificationProvenance" : {
+        "category" : "unknown",
+        "tags" : {
+
+        }
+      },
+      "createdAt" : 814667368.117815,
+      "discussionRequested" : false,
+      "draft" : {
+        "allocations" : [
+
+        ],
+        "amount" : {
+          "currency" : "USD",
+          "minorUnits" : "-1000"
+        },
+        "answer" : "",
+        "archivalFields" : {
+
+        },
+        "categoryID" : "food",
+        "date" : "2026-06-12",
+        "historicalDecisions" : [
+
+        ],
+        "notes" : "",
+        "payee" : "Fictional refund",
+        "postingStatus" : "posted",
+        "questionState" : "none",
+        "refundAllocations" : [
+          {
+            "allocationID" : "00000000-0000-4000-8000-000000000001",
+            "amountMinorUnits" : "600",
+            "currency" : "USD",
+            "purchaseID" : "60000000-0000-4000-8000-000000000006"
+          },
+          {
+            "allocationID" : "40000000-0000-4000-8000-000000000004",
+            "amountMinorUnits" : "400",
+            "currency" : "USD",
+            "purchaseID" : "60000000-0000-4000-8000-000000000006"
+          }
+        ],
+        "reportedExceptional" : {
+          "kind" : "unknown"
+        },
+        "reportedVisibility" : {
+          "kind" : "unknown"
+        },
+        "sourceNotes" : [
+
+        ],
+        "sourceVersions" : [
+
+        ],
+        "tags" : [
+
+        ],
+        "treatment" : "refund"
+      },
+      "id" : "50000000-0000-4000-8000-000000000005",
+      "reviewHistory" : [
+
+      ],
+      "revision" : "1",
+      "updatedAt" : 814667368.117815
+    }
+  ],
+  "schemaVersion" : 2
+}

@@ -1,0 +1,34 @@
+{
+  "acknowledgedOperationIDs" : [
+
+  ],
+  "answers" : [
+    {
+      "expectedRevision" : "1",
+      "id" : "44704D2D-E5AB-4A7B-AC0F-AB72EEC7C740",
+      "recordID" : "60000000-0000-4000-8000-000000000006",
+      "text" : "This fictional purchase has a balanced Food/Supplies split."
+    }
+  ],
+  "id" : "CFCA1ED0-2400-4132-84E0-A9C931F4F76B",
+  "knowledgeProposals" : [
+
+  ],
+  "knowledgeVersion" : "EE4D9DB0-ACA0-4158-9A5D-531039375419",
+  "packetID" : "D2546DC9-27B0-4476-806A-344B9341BB18",
+  "proposals" : [
+    {
+      "expectedRevision" : "1",
+      "id" : "5480DA7B-23DC-4B2C-9E91-998C00E114E7",
+      "rationale" : "Fictional tag refinement for explicit review",
+      "recordID" : "60000000-0000-4000-8000-000000000006",
+      "tags" : [
+        "Travel",
+        "Synthetic"
+      ]
+    }
+  ],
+  "purpose" : "fintrack-review-response",
+  "schemaVersion" : 2,
+  "summary" : "Synthetic response only"
+}

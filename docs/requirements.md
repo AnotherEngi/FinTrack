@@ -1,5 +1,16 @@
 # FinTrack requirements and implementation plan
 
+Current 2026-10-25 source and acceptance evidence:
+[framework validation](framework-validation.md),
+[current contracts and synthetic examples](contracts/financial-framework.md), and
+[full data inventory/retention](data-retention.md). Splits, subcategories,
+programs, claims, repayments and lifecycle evidence are structured in source;
+Mac/device validation for this model remains pending. Retired development
+readers/schema migrations have been removed. Before a future architecture-breaking
+change, ask what must be preserved before choosing multiple revisions/adapters.
+Real initial/refund migration remains blocked until this revision's acceptance.
+Earlier prototype capability/status descriptions below are historical.
+
 **Pre-release architecture policy:** obsolete development formats do not require
 preservation in the planned framework rebuild. Use one current model/schema and
 one current contract per purpose. Before a future breaking change, ask the user

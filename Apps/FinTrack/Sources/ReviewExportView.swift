@@ -14,13 +14,16 @@ private enum ReviewPage: String, CaseIterable, Identifiable, Hashable {
 struct ReviewExportView: View {
     @Bindable var ledger: LedgerViewModel
     @State private var destination: ReviewPage?
+    @State private var showFinancialSettings = false
     var body: some View {
         NavigationStack {
             List {
                 Button("Send to ChatGPT", systemImage: "square.and.arrow.up") { destination = .send }
                 Button("Import ChatGPT Reply or Weekly File", systemImage: "square.and.arrow.down") { destination = .inbox }
                 Button("Backup", systemImage: "externaldrive") { destination = .backup }
+                Button("Financial Settings", systemImage: "slider.horizontal.3") { showFinancialSettings = true }
             }
+            .sheet(isPresented: $showFinancialSettings) { FinancialSettingsView(ledger: ledger) }
             .sheet(item: $destination) { page in
                 switch page {
                 case .send: SendReviewView(ledger: ledger)
@@ -75,6 +78,7 @@ private struct TransferForm: View {
     @State private var confirmCleanup = false
     @State private var transferNotice: String?
     @State private var historyCandidate: HistoryImport?
+    @State private var refundCandidate: RefundImport?
 
     var body: some View {
         NavigationStack {
@@ -166,6 +170,17 @@ private struct TransferForm: View {
             .interactiveDismissDisabled(working)
             .sheet(item: $historyCandidate) { candidate in
                 HistoryImportPreview(ledger: ledger, candidate: candidate)
+            }
+            .sheet(item: $refundCandidate) { candidate in
+                NavigationStack {
+                    Form {
+                        Text("Dedicated deferred refund import: \(candidate.records.count) refunds. Gross purchases will be reduced only for explicitly linked, attributed amounts.")
+                        ForEach(candidate.records) { record in LedgerRecordRow(record: record, catalog: ledger.catalog) }
+                        if let reason = ledger.historyImportBlockReason { Text(reason).foregroundStyle(.orange) }
+                        Button("Import Reviewed Refunds") { attempt { try ledger.importRefunds(candidate); refundCandidate = nil } }
+                            .disabled(ledger.historyImportBlockReason != nil)
+                    }.toolbar { Button("Cancel") { refundCandidate = nil } }
+                }
             }
             .confirmationDialog("Replace saved data with this backup?", isPresented: $confirmRestore, titleVisibility: .visible) {
                 Button("Restore Backup", role: .destructive) {
@@ -306,6 +321,10 @@ private struct TransferForm: View {
             historyCandidate = try HistoryImport.decode(data)
             return
         }
+        if header.purpose == "fintrack-refund-import" {
+            refundCandidate = try StrictJSON.decode(RefundImport.self, from: data)
+            return
+        }
         let known = ledger.workspace.staged.contains { $0.id == header.id } || ledger.workspace.importReceipts?.contains { $0.id == header.id } == true
         try ledger.stageIncoming(data)
         transferNotice = known ? "This file was already received. No financial records were changed by pasting it again."
@@ -370,14 +389,8 @@ private struct HistoryImportPreview: View {
             List {
                 Section("History migration") {
                     Text(candidate.sourceName)
-                    Text("\(candidate.rows.count) records; net control total \(candidate.audit.netAmountMinorUnits) minor units.")
-                    Text("\(candidate.rows.filter { $0.approval == .confirmed }.count) prior explicit approvals will be preserved. Resolved assistant questions/reasons are cleared by the retention policy.")
-                    Text("Creates and verifies a separate ledger. The current ledger is preserved in Backup. This is an initial migration, not a merge of weekly changes.")
-                    DisclosureGroup("Prior approvals supplied by the source") {
-                        ForEach(candidate.rows.filter { $0.approval == .confirmed }, id: \.id) { row in
-                            Text(row.sourceRow + " · " + row.merchant + ": " + row.approvalEvidence).font(.caption)
-                        }
-                    }
+                    Text("\(candidate.records.count) logical records. Review the independent source controls below.")
+                    Text("Historical approvals are evidence; any unresolved question makes current classification unapproved. Creates a separate ledger, preserving the current one.")
                     DisclosureGroup("Imported category catalog") {
                         ForEach(candidate.categories) { category in
                             Text(category.label + " (" + category.id + ")" + (category.unresolved ? " · unresolved" : "") + (category.excluded ? " · excluded" : ""))
@@ -407,11 +420,17 @@ private struct HistoryImportPreview: View {
 private struct HistoryAuditView: View {
     let audit: HistoryAudit
     var body: some View {
-        Text("Source rows: \(audit.sourceRowCount). Net control total: \(audit.netAmountMinorUnits) minor units.")
-        ForEach(Array(audit.columns.enumerated()), id: \.offset) { entry in
-            Text(entry.element.name + " → " + entry.element.handling + ": " + entry.element.target + ". " + entry.element.explanation).font(.caption)
+        Text("Source rows: \(audit.sourceRowCount)")
+        ForEach(Array(audit.controls.enumerated()), id: \.offset) { entry in
+            let value = entry.element
+            Text(value.group + ": \(value.count) rows; debit \(value.debitMinorUnits), credit \(value.creditMinorUnits), net \(value.netMinorUnits), gross spending \(value.spendingMinorUnits) cents").font(.caption)
         }
-        ForEach(Array(audit.excludedRows.enumerated()), id: \.offset) { entry in Text("Excluded " + entry.element.sourceRow + ": " + entry.element.reason).font(.caption) }
+        ForEach(Array(audit.columns.enumerated()), id: \.offset) { entry in
+            Text(entry.element.name + " → " + entry.element.handling + ": " + (entry.element.target?.rawValue ?? "omitted") + ". " + entry.element.explanation).font(.caption)
+        }
+        ForEach(Array(audit.rows.filter { $0.disposition != .active }.enumerated()), id: \.offset) { entry in
+            Text(entry.element.locator + ": " + entry.element.disposition.rawValue + ". " + entry.element.reason).font(.caption)
+        }
         ForEach(Array(audit.warnings.enumerated()), id: \.offset) { entry in Text(entry.element).font(.caption) }
     }
 }
@@ -587,7 +606,7 @@ private struct IncomingReviewView: View {
         }
         let changes = response.proposals.filter { proposal in
             guard let record = ledger.record(id: proposal.recordID) else { return false }
-            let hasFields = proposal.categoryID != nil || proposal.tags != nil
+            let hasFields = proposal.categoryID != nil || proposal.tags != nil || proposal.primarySubcategoryID != nil || proposal.allocations != nil
             return hasFields && (proposal.changesClassification(of: record) || ledger.workspace.decidedProposals.contains(proposal.id))
         }
         if !changes.isEmpty {
@@ -600,6 +619,13 @@ private struct IncomingReviewView: View {
                     }
                     if let tags = proposal.tags {
                         Text("Tags: \(ledger.record(id: proposal.recordID)?.draft.tags.joined(separator: ", ") ?? "None") → \(tags.isEmpty ? "None" : tags.joined(separator: ", "))")
+                    }
+                    if let subcategory = proposal.primarySubcategoryID { Text("Primary subcategory: " + (subcategory.isEmpty ? "None" : subcategory)) }
+                    if let parts = proposal.allocations {
+                        Text(parts.isEmpty ? "Remove the split; use the primary category." : "Replace category allocations:")
+                        ForEach(parts) { part in
+                            Text((ledger.catalog.category(id: part.categoryID)?.label ?? part.categoryID) + " / " + (part.subcategoryID ?? "") + ": " + part.amount.decimalText)
+                        }
                     }
                     Text(proposal.rationale)
                     actions(response: response, id: proposal.id,
@@ -633,16 +659,7 @@ private struct IncomingReviewView: View {
         do { try action() } catch { failure = error.localizedDescription }
     }
     private func displayAnswers(_ response: ReviewResponse) -> [DiscussionAnswer] {
-        var answers = response.answers
-        for proposal in response.proposals {
-            guard let record = ledger.record(id: proposal.recordID) else { continue }
-            let plainReply = proposal.categoryID == nil && proposal.tags == nil
-            if plainReply || (!proposal.changesClassification(of: record) && !ledger.workspace.decidedProposals.contains(proposal.id)) {
-                answers.append(DiscussionAnswer(id: proposal.id, recordID: proposal.recordID,
-                    expectedRevision: proposal.expectedRevision, text: proposal.rationale, questionForUser: proposal.question))
-            }
-        }
-        return answers
+        return response.answers
     }
 }
 

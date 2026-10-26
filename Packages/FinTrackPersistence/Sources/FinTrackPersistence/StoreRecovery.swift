@@ -50,7 +50,7 @@ public enum StoreRecovery {
                   restored.workspace.summaryVisibility == snapshot.workspace.summaryVisibility,
                   restored.workspace.importedCategories == snapshot.workspace.importedCategories,
                   restored.workspace.historyImport == snapshot.workspace.historyImport,
-                  restored.workspace.historyDetails == snapshot.workspace.historyDetails else {
+                  try ExchangeJSON.encode(FinancialContext(workspace: restored.workspace)) == ExchangeJSON.encode(FinancialContext(workspace: snapshot.workspace)) else {
                 throw ExchangeError.invalid("The isolated restore did not match the archive. The active store is unchanged.")
             }
             return id

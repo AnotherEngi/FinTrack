@@ -1,0 +1,30 @@
+{
+  "coverage" : "Fictional Card · 2026-06-13 through 2026-06-19 · partial synthetic coverage",
+  "id" : "5CBC8506-C8E4-4B4C-81CB-D8288CDDB557",
+  "purpose" : "fintrack-weekly-intake",
+  "schemaVersion" : 2,
+  "transactions" : [
+    {
+      "allocations" : [
+
+      ],
+      "amountMinorUnits" : "1234",
+      "categoryID" : "food",
+      "currency" : "USD",
+      "date" : "2026-06-19",
+      "identity" : {
+        "sourceAlias" : "Fictional Card",
+        "transactionID" : "weekly-synthetic-0001"
+      },
+      "merchant" : "Fictional weekly merchant",
+      "postingStatus" : "posted",
+      "sourceNotes" : [
+
+      ],
+      "tags" : [
+
+      ],
+      "treatment" : "spending"
+    }
+  ]
+}

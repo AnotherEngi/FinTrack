@@ -86,7 +86,7 @@ import Testing
     let record = try SyntheticTransactions.make()[0]
     var state = ReviewWorkspace()
     let packet = try state.prepare(records: [record], catalog: .prototype, mode: .pending)
-    let proposal = ClassificationProposal(recordID: record.id, expectedRevision: String(record.revision), rationale: "Synthetic")
+    let proposal = ClassificationProposal(recordID: record.id, expectedRevision: String(record.revision), categoryID: "sample-household", rationale: "Synthetic")
     let response = ReviewResponse(packetID: packet.manifest.id, knowledgeVersion: packet.manifest.knowledgeVersion, proposals: [proposal])
     let data = try ExchangeJSON.encode(response)
     try state.stage(data); try state.stage(data)

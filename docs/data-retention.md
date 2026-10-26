@@ -1,147 +1,92 @@
-# FinTrack data inventory and retention
+# Data inventory, storage and retention
 
-Updated 2026-10-25. This describes the current source after the lifecycle fixes,
-not a claim of successful execution of the new Mac/iPad flows. All 119 portable
-tests passed on Windows; 19 Apple files passed syntax parsing. The user reports
-earlier native/iCloud checks passed; the clipboard/history batch needs its own
-validation. See [the current trial guide](real-data-trial.md).
-Only synthetic development data was used. No commit/push was performed.
+2026-10-25 financial framework. This describes current source, not a claim that
+this revision has passed native/iPad acceptance. See [validation](framework-validation.md).
+Only independently invented transactions were used in development.
 
-FinTrack owns the accepted financial ledger. ChatGPT supplies temporary analysis;
-its full responses are not a permanent financial history. Approval closes the
-current discussion. A later explicit discussion, or a newer question about a
-subsequent unapproved revision, can open a new one. Approval never deletes unsent
-corrections, user notes, accepted guidance, or unfinished input.
+The accepted ledger is authoritative. ChatGPT replies are temporary discussion
+and proposed edits, not a second permanent ledger. No retention rule silently
+expires unfinished financial work or pending user feedback.
 
-## Storage locations
+## Where data lives
 
-`Application Support/FinTrack` is private app storage on the iPad. The initial
-database is `FinTrack.store` with its SQLite sidecars and `.amount-sign` marker.
-After restore, `ActiveStore.json` selects `Stores/<UUID>/FinTrack.store`.
-The live database remains local; it is never placed in iCloud Drive.
+The live database is local SwiftData under `Application Support/FinTrack`:
+initially `FinTrack.store`; after explicit restore/new-ledger recovery,
+`ActiveStore.json` points to `Stores/<UUID>/FinTrack.store`. SQLite sidecars and a
+current-format marker accompany it. Transactions are indexed SwiftData rows plus
+current JSON payloads; the workspace is a separate JSON payload row. Growing
+workspace indexing/performance still needs device measurement.
 
-Transactions have separate SwiftData rows with indexed fields and a JSON domain
-payload. Growing exchange state still uses the SwiftData workspace JSON row.
-This batch adds compaction and capacity checks; splitting that row into indexed
-entities and measuring large-history performance remain separate work.
+Logical `.fintrack` archives contain current financial and recoverable workspace
+state. Automatic backup writes the latest complete state to the chosen iCloud
+Drive folder and confirms cloud metadata. The live DB never resides in iCloud
+Drive. Local save, local candidate creation and confirmed upload are different
+states. Manual exports are independent user-controlled checkpoints.
 
-The selected iCloud Drive folder receives **logical full backups**, including
-records and all recoverable workspace state. Local folder permissions, upload
-progress, and retired database files are not embedded in those archives.
+## Financial data
 
-## Financial and working data
+All rows below are included in full logical backup/restore. They have **no
+automatic age expiry**; normal edits replace current editable values, and an
+explicit restore can replace the ledger. The app has no generic transaction-delete
+feature or automatic deletion of old financial history.
 
-| Data | Storage | Purpose | Retention / removal |
-| --- | --- | --- | --- |
-| Transaction IDs, dates, merchant, exact amount/currency, posting/treatment, optional activity date | Transaction SwiftData row and domain payload; full backups | Authoritative financial history | No automatic expiry. Edits replace current values. Full restore can replace the ledger. Individual transaction deletion is not implemented. |
-| Current category and tags, exceptional-event flag | Transaction payload; full backups | Classification and reporting | No automatic expiry; kept until edited or replaced by restore. Tags remain even when their discussion is removed. |
-| Imported actual category catalog | Workspace `importedCategories`; full backups | Keep real category IDs/labels and flags consistent across restart, editing, weekly intake and ChatGPT | No automatic expiry; retained with the ledger and restored with it. Synthetic defaults apply only before migration. |
-| Initial history migration audit/receipt | Workspace `historyImport`; full backups | Source alias, import ID/fingerprint, original record IDs, declared source row/column accounting, exclusions, warnings, control total and import time | No automatic expiry. It is source provenance, not a retained ChatGPT conversation. It records exporter assertions, not independent proof of source completeness. |
-| Preserved unsupported Sheet details and prior approval evidence | Workspace `historyDetails` keyed by record UUID; full backups | Avoid losing source subcategory/split/reimbursement details; read-only editor inspection and corresponding ChatGPT review context | Retained with the financial record until replaced by full restore. They do not drive native accounting. Mapped transient assistant questions/reasons are not duplicated here. |
-| Source alias UUID/label and genuine provider transaction identity mappings | Transaction source plus workspace source links; full backups | Identify the source and prevent duplicate intake | Retained with the financial record. Labels are not credentials. Stable provider/account identity independent of labels is still a contract gap. |
-| Original and latest accepted source facts | Workspace source links; full backups | Preserve source evidence independently of manual annotations and compare updates | Both retained indefinitely with the record. Intermediate full source versions are not kept. |
-| Superseded source fingerprints and pending-to-posted successor identity | Source links; full backups | Reject known older facts and prevent superseded pending IDs from regressing a posted record | Compact fingerprints/identity relationships retained indefinitely. Unknown older facts cannot be ordered reliably by weekly v1. |
-| Refund allocations: purchase IDs and positive exact amounts | Refund transaction payload; full backups and read-only review context | Reduce spending on original purchase dates without changing the refund's bank date | No automatic expiry; until the user changes links or restores another state. |
-| User-authored notes and the last saved user answer | Transaction payload; full backups; committed review context | Preserve user-owned facts and corrections | No automatic expiry. Approval does not erase these fields; the user can edit/clear them. They are distinct from the conversation transcript. |
-| Earlier ledger notes / legacy review flag | Transaction payload; full backups | Preserve historical source evidence without inferring approval | Retained with the record; no automatic expiry. |
-| Category/tag authorship, approval and discussion state, record revisions/timestamps | Transaction payload; full backups | Show current authority and reject stale changes | Current state retained with the record. Explicit Discuss opens a new discussion after closure. |
-| Explicit review actions: action ID, type, base/applied revision and time | Embedded transaction review history; full backups | Explain explicit approvals/reopens and make action retries harmless | Retained with the record. This is compact action metadata, not every old financial value or an LLM transcript. |
-| Assistant question/reason on a transaction | Transaction payload; full backups while present | Explain the current classification question | Cleared by Approve/Mark Resolved. Maintenance removes legacy closed assistant text with a revision increment, preserving financial fields/approval. It defers this cleanup for records with drafts or at the revision limit. Legacy ledger notes remain. |
-| Unfinished transaction editor input | Workspace drafts keyed by stable record ID; full backups | Recover invalid/incomplete offline input | Until valid input commits or the user explicitly discards it. No age-based deletion. |
-| Unfinished discussion reply | Workspace discussion drafts; full backups | Recover typed but unsent questions/answers | Until sent or explicitly discarded. A nonempty reply draft blocks approval/closure so text is not silently lost. |
-| Committed discussion replies | Workspace reply collection; full backups | Supply an open discussion's context and send user feedback | Until discussion closure **and** associated outgoing feedback has been acknowledged. Unsent replies survive approval/closure. |
-| Open assistant answers/questions | Workspace typed answer collection; full backups | Read/reply without accepting financial changes | Until approval or explicit resolution of that discussion. No arbitrary age cutoff for open work. Answers can outlive their original raw response file. |
-| Discussion closure revision cursors | Workspace; full backups | Keep old questions closed and separate a later discussion | Retained with the record; contains IDs/revisions, not old question/note text. Older content-heavy closure boundaries are converted and removed. |
-| Pending outgoing feedback, prior/saved values and operation IDs | Workspace pending events; full backups | Deliver additions, corrections, approval/decisions and user replies to ChatGPT | Until a validated response acknowledges those exact operations. Approval, preparing, sharing, or dismissing a response does not clear it. |
-| Accepted classification guidance | Workspace current rules with IDs/text/origin and version; full backups | Recover learned rules and include them in reviews | Current accepted rules retained until edited/deleted. This batch does not add permanent rule-text version history. Limit: 1,000 current rules, enforced for manual and assistant additions alike. |
-| Visibility rules by transaction/category/tag | Workspace preferences; full backups | Persistently hide records from Overview only | Until the user changes them or restores another backup. They do not filter financial exports or ChatGPT packets. |
+| Data | Storage | Purpose / retention details |
+| --- | --- | --- |
+| Record UUID, exact money/currency, merchant, posting/treatment, dates | Transaction payload plus indexed fields | Current financial facts. Revisions prevent stale replacement. Current values remain until edited/restored. |
+| Primary category/subcategory, exact expense allocations, tags and per-field origin | Transaction payload | Classify one parent without double counting. Allocation UUIDs support refund/repayment links. Keep current amounts/classification indefinitely; immutable source evidence is separate. |
+| Category/subcategory catalog: IDs, stored/display labels, definitions, unresolved/excluded flags, origin | Workspace catalog | Global taxonomy, including unused definitions. Manual changes are validated against all references; referenced definitions cannot disappear. |
+| User notes/answers and factual ledger notes | Transaction payload; unsent changes also in feedback | Durable user/factual meaning. Approval does not clear them. No age expiry. |
+| Owned source text and qualified archival fields with SourceValue presence | Transaction payload | Preserve provider details/codes/confidence/helper values and mixed/unknown ownership without treating helpers as live calculations. Known resolved assistant roles are the exception described below. |
+| Source visibility/exceptional flags and original report date/timestamp evidence | Transaction payload/source versions | Preserve unknown/absent/null/false separately from current display choices. No inferred false or timestamp conversion. |
+| Source versions, predecessor/successor chain, original amounts/dates/descriptions/classification, safe notes, historical decisions | Transaction payload | Permanent financial lineage. Reconciliation appends observations; ordinary editing cannot rewrite them. No known transient assistant questions/reasons are permitted here. |
+| Historical source approval evidence, actor/origin and known/unknown decision/observation times | Transaction payload/source versions | Evidence independent of current approval. Unknown time remains unknown, never import time. Retained even for pending/superseded classifications. |
+| Local review actions: request UUID/action/expected revision/applied revision/time | Transaction payload | Idempotent user commands and local action history. Contains action metadata, not snapshots of all earlier fields or permanent ChatGPT replies. |
+| Current approval and explicit discussion intent/progress/question state | Transaction payload | Current workflow. Unresolved question means unapproved; explicit Approve closes discussion. No inferred approval. |
+| Accounts: app UUID, aliases, recorded provider/provider account identity | Workspace | Source identity context without credentials. Unknown provider identities remain unknown. No expiry. |
+| Source links: genuine provider identity, logical record ID, original/latest observation and superseded fingerprints | Workspace | Deduplicate/reconcile intake and reject old-source replays. No source IDs invented from audit rows. Financial observations persist; no raw ChatGPT commentary. |
+| Payment-counterpart and duplicate-candidate relationships | Workspace | Typed links; neither guesses a refund nor silently removes duplicates. Retained until explicitly edited/restored. |
+| Benefit programs: identity, limit, period/basis, eligibility rules/defaults/origin | Workspace | Recorded benefit configuration. Unknown settings remain unknown; no invented balance, reset or claim. No history of every settings keystroke. |
+| Claims: purchase/program links, eligibility, expected money, status, source-reported received amount, notes | Workspace | Expected/source-reported values are evidence, not cash. Current state persists; no age expiry. |
+| Actual repayment allocations: receipt/claim/optional purchase-component links and positive exact money | Workspace | Partial/combined receipts, outstanding balance and purchase net cost; receipt over-allocation rejected. Persists until explicitly changed/restored. |
+| Reporting settings, original source-rule evidence and account-period coverage | Workspace | New York/Monday/calendar-month behavior, inclusion of unapproved posted purchases, missing coverage limitations. Settings are current; source evidence is not silently reinterpreted. |
+| Original source comparison baselines and exact basis/controls | Workspace | Read-only source evidence in ordinary settings. Current reporting changes do not rewrite original totals. |
+| Accepted global guidance | Workspace knowledge library | Classification knowledge stored once; manual/accepted edits replace current text, not a permanent text-version archive. Current rules retained until edited/removed. |
+| Persistent Overview visibility by record/category/tag | Workspace | Display-only hiding; does not delete or exclude records elsewhere. Retained until changed/restored. A category rule affecting any component hides that whole transaction. |
+| Initial migration receipt: import UUID/payload digest/record IDs/source label/row and column audit/controls/import time | Workspace | One-time migration reconciliation and replay protection. Includes deferred refunds and exclusion reasons; kept indefinitely. This is not a workbook fingerprint or artifact. |
+| Dedicated refund receipt: import/migration IDs, payload digest, deferred locators/record IDs/import time | Workspace | Stage identity/replay protection; no duplicate raw refund file. Kept indefinitely. |
 
-The prototype starts with five synthetic categories; a history import now installs
-the actual category catalog. Structured subcategories, general spending splits, and reimbursement
-relationships are **not implemented**; do not mistake refund allocations for
-those features. No bank passwords, OAuth tokens, or LLM API credentials are
-stored by this app.
+## Temporary analysis and unfinished work
 
-## Exchange data
+| Data | Storage | Retention / removal |
+| --- | --- | --- |
+| Current assistant question/reason | Transaction assistant context and known-role source/archival fields | Only while unresolved. Explicit Approve/Resolve clears known text, including archival copies; known resolved import text is cleared before commitment. User/factual/mixed/unknown text survives. |
+| Imported discussion answers and follow-up questions | Pending response JSON, then extracted active answer objects | Retained while discussion is open. Removed from active answer storage after closure. A shared response file can still contain closed text until all its other items finish or the user dismisses remaining items. |
+| User discussion replies | Workspace | Until discussion closes and the associated pending feedback is acknowledged. Durable transaction notes/answers remain separate. |
+| Discussion closure revision | Workspace | Compact revision cursor retained indefinitely, without copying closed question/answer text. No old text-boundary compatibility objects. |
+| Raw transaction draft, including invalid text and its base evidence/revision | Workspace opaque draft bytes | Until successful save/explicit discard. Included in archives; no age expiry. Current decoder and reference checks protect restore. Never booked as money until valid. |
+| Unfinished discussion draft | Workspace | Until sent/discarded. Future revisions are rejected; stale drafts remain recoverable and require review. Closure cannot silently discard unfinished replies. |
+| Pending feedback: operation UUID/revisions/exact prior and saved fields | Workspace | Until an acknowledgement explicitly covers those operation IDs. Unsent consecutive autosaves can coalesce. Later edits survive older acknowledgements. Includes allocation/subcategory changes. |
+| Imported review-response or weekly JSON | Workspace staged files | Full canonical file retained while work is unfinished. Removed after acknowledgement and proposal settlement/all weekly facts incorporated, or explicit dismissal. No age-based deletion. |
+| Compact import receipt: digest, file/packet/item/decision IDs, disposition/time, optional coverage/count | Workspace | Kept indefinitely for replay/ID-reuse checks after raw deletion. Does not keep all reply text or duplicate financial rows. |
+| Unread response summary | Receipt until first processed-file view | Cleared from persistence when opened; memory copy survives only that view. Re-import does not recreate a read summary. |
+| Prepared manifest: selected revisions, pending operation IDs, guidance version, discussion scope | Workspace | Retired once completed and no remaining dependent work, or after 90 days without a staged dependency. Pending feedback survives expiration; prepare a new review for late replies. |
+| Retired packet IDs | Workspace | Small indefinite tombstones rejecting late output after full manifest deletion. |
+| History/refund import candidate and preview | View memory before confirmation | Discarded on dismissal. Accepted typed facts/audit/receipt persist; no full raw migration file is retained. |
+| Prepared review/manual archive files | OS temporary `FinTrackPrepared` directory | App cleans recognized files older than 7 days on launch/maintenance; OS may remove them sooner. The ledger/outbox remains authoritative. |
+| Clipboard review text | Explicit local-only iPad pasteboard copy | App-set copy expires after one hour; no clipboard log. User copies from ChatGPT have external retention. Paste is explicit; never read the clipboard on launch. |
+| Charts, selections, temporary category toggles, Show Hidden, session activity | Memory | No backup. Category selections reset on app background/date-range changes; all reset on process termination. |
 
-| Data | Storage | Purpose | Retention / removal |
-| --- | --- | --- | --- |
-| Clipboard review text | iPad pasteboard; explicit copy only | Paste a prepared review into ChatGPT without a Files upload | App copies expire after one hour and are marked local-only. User-created ChatGPT copies have their own external retention. Clipboard limits never truncate a packet. |
-| Pasted reply / initial history preview | View memory, then the existing validated staging/migration path when accepted | Explicit clipboard transport with normal validation and review | No separate clipboard log. Unconfirmed history stays in memory; accepted history retains typed records/audit/details, not the entire raw migration file. Staged reply retention follows the rows below. |
-| Imported ChatGPT response JSON | Canonical bytes in workspace staged files; full backups while pending | Validate provenance and show undecided proposals | Removed as soon as acknowledgement is recorded and all actual classification/guidance proposals are handled. Open answers are extracted first. Approval settles older classification proposals; it does not accept guidance. A shared raw file may still contain closed text while another item in that file remains undecided; Dismiss Remaining Items explicitly finishes it. |
-| Imported weekly JSON | Workspace staged files; full backups while pending | Review/add/reconcile incoming source facts | Removed once every row's facts are incorporated, or the user explicitly dismisses remaining rows. Unfinished files are not deleted by age. |
-| Compact import receipts | Workspace; full backups | Reject changed-content file-ID reuse, repeated operations and reused item IDs after raw deletion | IDs/fingerprints kept indefinitely. Contains file ID, purpose, SHA-256 fingerprint, processing time/disposition, packet/item/decision IDs, and optional row count/reported weekly coverage. No full response or financial row copies. |
-| Unread import summary | Temporary text on its receipt; full backups while unread | Avoid erasing an incoming summary before it can be displayed | Cleared from persistence when the processed file is opened. The open view keeps a memory copy only until dismissal. Re-import does not recreate a cleared summary. This is not an open classification discussion. |
-| Reported weekly coverage | Raw pending batch, then its receipt; full backups | Preserve the collector's coverage claim as source evidence | Retained as compact receipt text after raw-file deletion. It is not independently verified, and is not structured complete/partial account-period coverage. |
-| Active processed/proposal-ID sets | Workspace; full backups | Idempotent operations while a raw response is pending | Removed when that file is compacted; necessary IDs move into its receipt. |
-| Prepared review manifests: operation IDs, record revisions, guidance version and discussion scope | Workspace; full backups | Bind returned suggestions/acknowledgements to what was actually sent | Retired after a completed file has no remaining pending operations or active staged response. Otherwise retire after 90 days when no staged response still requires it. Pending feedback is retained even if the old manifest expires. |
-| Retired review-packet IDs | Workspace; full backups | Explicitly reject late results after full manifests are removed | Kept indefinitely as small ID tombstones. An expired packet needs a new review; the app never silently accepts late output. |
-| Prepared review JSON / temporary manual backup export | OS temporary `FinTrackPrepared` directory | Allow share/save extensions to read a frozen file | App cleanup after 7 days on launch and successful current-backup maintenance; the OS may remove temporary files sooner. The manifest/outbox or authoritative ledger survives independently. |
-| Files manually saved/shared elsewhere | User-selected Files destinations, ChatGPT attachments, other recipients | User-controlled exchange/checkpoints | Outside FinTrack's deletion control. App compaction does not delete those copies. |
+## Backup/recovery and external copies
 
-No raw ChatGPT response is required forever for replay protection. Its hash/IDs
-replace it. Retention runs atomically with workspace mutations, on startup, and
-during active backup maintenance. Suspension/force-quit pauses maintenance;
-age-based housekeeping resumes when the app runs. Opening or dismissing a file
-never counts as bank verification or approval of its contents.
+| Data | Location | Retention / removal |
+| --- | --- | --- |
+| Current archive candidates and upload journal | Local `BackupCandidates` / `BackupConnection.json` | Keep pending candidate and last confirmed metadata until a complete replacement is confirmed. Candidate files are current bounded archives, never base64 JSON compatibility copies. |
+| Security-scoped folder bookmark | Local backup journal | Until folder reconfiguration. It is not included in logical archives or AI review packets. |
+| Last confirmed cloud archive | Chosen iCloud Drive folder | Preserve until replacement upload confirmation. Old confirmed/candidate cleanup then runs; failed cleanup may leave extra files. No automatic long-term version history is promised. |
+| Damaged journal, previous/current/abandoned recovery stores | Local Application Support | Preserve until explicit user deletion or verified-current-backup cleanup of eligible retired files. Incompatible development files are not decoded/migrated or silently reset. |
+| Atomic-write partial files | Local backup/temp directories, or unpublished cloud staging | Failed operations clean their own unpublished partial; recognized interrupted local partials older than one day are cleaned. Finalized backups are not treated as partial files. |
+| User-saved/shared exports, ChatGPT text/attachments and original Sheet/workbook | Outside app-controlled retention | User/external service controls retention. App compaction cannot erase these copies. FinTrack does not copy, fingerprint, reference or manage the original workbook. |
 
-## Backups, recovery, configuration, and temporary state
-
-| Data | Storage | Purpose | Retention / removal |
-| --- | --- | --- | --- |
-| Latest confirmed full backup | Chosen iCloud Drive folder, `FinTrack-<UUID>.fintrack` | Complete logical recovery, including unfinished work | Latest only. Previous confirmed file stays until a validated replacement has an upload confirmation. Failed old-file deletion remains in a retry queue. |
-| One replacement candidate | Persistent local `BackupCandidates` plus pending iCloud file | Retry exact immutable bytes across interruption/offline periods | Until upload confirms. Local candidate/orphan archives are then cleaned; its cloud copy becomes the confirmed backup. |
-| Unpublished cloud upload staging file | Selected cloud folder, `.FinTrack-upload-<UUID>.partial` | Prevent interrupted copies from acquiring a valid backup's final name | Verified and renamed into the final file after copying. Interrupted current attempts are retried/replaced; abandoned recognized staging files older than 24 hours are cleaned during successful backup maintenance in the currently selected folder. |
-| Local upload journal/bookmark | `BackupConnection.json`, private app storage | Remember folder permission, generation/hash/size/time, pending candidate and cleanup queue | Current configuration/progress retained until changed. Old journals containing base64 candidate data migrate to a separate file once. These permissions/settings are excluded from logical exports. |
-| Backup cleanup queue | Local upload journal | Retry deletion of replaced cloud files | Each item removed only after its file deletion succeeds and the journal is saved. Changing folders does not delete files in the old folder. |
-| Active-store pointer and amount marker | `ActiveStore.json`, `.amount-sign` beside each store | Select the verified database and enforce amount convention | Current pointer/marker retained while the store is used. Prior pointer copies are preserved on replacement and removable through local recovery cleanup; pointer metadata is not a financial backup. |
-| Previous, damaged, or interrupted recovery stores | Original database/sidecars or inactive `Stores/<UUID>` directories | Preserve pre-restore data without decoding it | Until explicit deletion in Backup → Preserved recovery data. The active store cannot be deleted there. Restore failures clean only the newly created attempt when safe; crash-left attempts remain discoverable. These stores are excluded from logical cloud backups. |
-| Legacy `BeforeRestore.json`, previous pointer and damaged journal copies | Private app storage | Preserve older recovery evidence | No new BeforeRestore JSON is created. Copies remain until explicit Delete Superseded Local Recovery Files. This action does not delete cloud backups or the active store. |
-| Legacy raw draft files | Private `Drafts/<UUID>.json` | Preserve input during migration into SwiftData | For the original store, remove only after migration and confirmation of a current cloud backup. If an isolated restore replaced that store, old drafts stay with the preserved original until its explicit deletion. |
-| Partial archive files left by a crash | Private archive destination directory, `.archive-<UUID>.partial` | Unpublished interrupted writer output | Never treated as valid backups or activated stores. Ordinary failures remove them immediately. Recognized crash leftovers older than 24 hours are removed on launch or successful current-backup maintenance. |
-| Search, sorting, chart selection, Show hidden, temporary category switches, session activity markers | Memory only | Current interaction state | No backup. New process resets it; category switches and chart selection also reset on date-range changes/backgrounding. |
-| Derived ledger/discussion/report projections and intake date indexes | Memory only | Display current data and avoid repeated full-history matching | Rebuilt from saved records/workspace; discarded on replacement or process termination. No independent history or archive entry. |
-| Startup/operation errors, transient export previews | Memory/UI | Report failures without claiming success | Until dismissed/replaced or the app process ends; no permanent diagnostic/financial telemetry log is introduced. |
-| Synthetic fixtures and test archives | Synthetic source fixtures; test archives in OS temporary directories | Development/regression checks | Source fixtures remain in Git. Tests remove their own temporary directories; interrupted test leftovers follow OS/user cleanup. No real data or credentials belong in the checkout. |
-
-Normal logical restore never requires encoding the current database. It builds a
-new store, commits it, reopens and validates it, then atomically switches the
-pointer. The old database and marker remain untouched. Existing logical JSON
-backups remain readable. A broken/missing selected store shows recovery rather
-than silently creating an empty replacement.
-
-## Capacity, privacy, and outstanding validation
-
-The new archive is a documented framed format with per-entry deflate compression,
-SHA-256 checks and a terminal count/order digest. It is a FinTrack recovery file,
-not a ZIP or ChatGPT review attachment. Native compressed archives are read by
-FinTrack on Mac/iPad; portable Windows tests use the uncompressed codec.
-
-Supported format ceilings are 250,000 records, 1 GiB logical payload, 80 MiB per
-entry, one million entries, and 2 GiB physical file. Conservative precommit
-capacity checks keep accepted state below those ceilings, including workspace
-growth; an 80% warning appears for record/byte capacity. This is **not** a measured
-iPad performance guarantee. Offline/cloud failures do not block local edits
-within local capacity. AI exchange files retain their separate 50 MiB limit.
-
-Archives are compressed, **not encrypted by FinTrack**. They contain private
-financial records, notes, and unfinished drafts. Application/cloud access
-protection is separate; archive encryption and recoverable keys are still an
-explicit design decision before real-data use. Do not put archives in this public
-repository. Provider/device backup copies, trash/version history, and manually
-shared files are outside the app's retention controls; no external retention
-duration is promised here.
-
-Removal means removal from the app's **logical active state** and future logical
-backups. SQLite pages/sidecars, device/provider backups, and previously shared
-files can retain older bytes. This batch does not implement or promise forensic
-secure erasure. The local database file can keep unused pages for later reuse
-even after raw responses are compacted; logical archive size reflects live data.
-
-Still required: Mac native tests and Xcode build, device corruption and
-interruption tests, actual cloud download → empty-store restore, and iPad memory/
-latency measurements above 50 MiB. Stable collector/account keys, unknown-source
-freshness, structured coverage, live subcategories/splits/reimbursements, full
-legacy behavioral parity, indexed workspace entities, bounded full-history review jobs, and
-guidance revision history remain future work. No cloud sync, automatic ChatGPT
-transport, account access, or billed API is added by this batch.
+No bank passwords, OAuth tokens, API keys or LLM billing credentials are stored by
+FinTrack. Uninstalling/deleting the app or restoring another archive can change
+local retention; cloud and externally saved copies follow their separate rules.

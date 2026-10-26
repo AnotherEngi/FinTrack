@@ -42,7 +42,7 @@ public enum BackupCapacity {
 /// hashed. The terminal digest binds their order and headers; it is integrity,
 /// not authentication. No paths from an archive are ever extracted to disk.
 public enum BackupArchive {
-    public static let magic = Data("FINTRACK-ARCHIVE-2\n".utf8)
+    public static let magic = Data("FINTRACK-FINANCIAL-ARCHIVE\n".utf8)
     private struct Manifest: Codable {
         let version: Int
         let minimumReader: Int
@@ -138,13 +138,7 @@ public enum BackupArchive {
         }
         let prefix = try readExactly(min(bytes, magic.count))
         if prefix != magic {
-            // Read compatibility for the old bounded JSON archive; never silently
-            // apply its exchange ceiling to new archive files.
-            guard bytes <= ExchangeJSON.maximumBytes else { throw ExchangeError.invalid("This is not a supported FinTrack archive. Legacy JSON backups must be at most 50 MiB.") }
-            try input.seek(toOffset: 0)
-            let data = try readExactly(bytes)
-            let backup = try ExchangeJSON.decode(FullBackup.self, from: data)
-            try backup.validate(catalog: .prototype); return backup
+            throw ExchangeError.invalid("This is not a current financial-framework archive. Development backup formats are not supported.")
         }
         var chain = "", count = 0, logicalBytes = 0, counts: [String: Int] = [:]
         var manifest: Manifest?, workspace: ReviewWorkspace?, records: [LedgerTransaction] = []
@@ -157,7 +151,7 @@ public enum BackupArchive {
                 line.append(byte)
                 guard line.count <= 4096 else { throw ExchangeError.invalid("Oversized backup header.") }
             }
-            let header = try JSONDecoder().decode(Header.self, from: line)
+            let header = try StrictJSON.decode(Header.self, from: line)
             guard header.bytes > 0, header.bytes <= BackupCapacity.maximumEntryBytes,
                   header.storedBytes > 0, header.storedBytes <= header.bytes,
                   header.compressed || header.storedBytes == header.bytes,
@@ -167,7 +161,7 @@ public enum BackupArchive {
             let data = header.compressed ? try compression.decompress(stored, expectedSize: header.bytes) : stored
             guard data.count == header.bytes, digest(field: header.field, key: header.key, data: data) == header.digest else { throw ExchangeError.invalid("A backup entry failed its integrity check.") }
             if header.field == "end" {
-                let end = try JSONDecoder().decode(End.self, from: data)
+                let end = try StrictJSON.decode(End.self, from: data)
                 guard let manifest, let workspace, end.entries == count, end.logicalBytes == logicalBytes,
                       end.chain == chain, end.counts == counts, records.count == manifest.records,
                       workspace.generation == manifest.generation,
@@ -180,7 +174,7 @@ public enum BackupArchive {
             chain = ContentDigest.sha256(Data((chain + String(decoding: line, as: UTF8.self)).utf8))
             if header.field == "manifest" {
                 guard count == 1, manifest == nil, header.key == nil else { throw ExchangeError.invalid("Duplicate or misplaced archive manifest.") }
-                let value = try JSONDecoder().decode(Manifest.self, from: data)
+                let value = try StrictJSON.decode(Manifest.self, from: data)
                 guard value.version == 2, value.minimumReader <= 2, value.amountConvention == Money.amountSignConvention,
                       (0...BackupCapacity.maximumRecords).contains(value.records) else { throw ExchangeError.invalid("Unsupported archive version, convention, or record capacity.") }
                 manifest = value
@@ -188,10 +182,10 @@ public enum BackupArchive {
                 guard manifest != nil else { throw ExchangeError.invalid("Archive is missing its manifest.") }
                 if header.field == "record" {
                     guard records.count < BackupCapacity.maximumRecords, workspace == nil else { throw ExchangeError.invalid("Unexpected archive record.") }
-                    records.append(try JSONDecoder().decode(LedgerTransaction.self, from: data))
+                    records.append(try StrictJSON.decode(LedgerTransaction.self, from: data))
                 } else if header.field == "workspace" {
                     guard workspace == nil else { throw ExchangeError.invalid("Duplicate archive workspace.") }
-                    let value = try JSONDecoder().decode(ReviewWorkspace.self, from: data)
+                    let value = try StrictJSON.decode(ReviewWorkspace.self, from: data)
                     var parts = 0; try workspaceParts(value) { _, _, _ in parts += 1 }
                     guard parts == 1 else { throw ExchangeError.invalid("Collections cannot be embedded in archive workspace metadata.") }
                     workspace = value
@@ -210,9 +204,10 @@ public enum BackupArchive {
         var base = workspace
         base.pending = []; base.manifests = []; base.staged = []; base.processedFiles = []; base.decidedProposals = []
         base.knowledge = []; base.sourceLinks = []; base.drafts = [:]; base.discussionReplies = nil
-        base.resolvedDiscussions = nil; base.discussionDrafts = nil; base.summaryVisibility = nil
+        base.discussionDrafts = nil; base.summaryVisibility = nil
         base.importReceipts = nil; base.retiredPacketIDs = nil; base.discussionAnswers = nil; base.discussionClosedRevisions = nil
-        base.importedCategories = nil; base.historyImport = nil; base.historyDetails = nil
+        base.importedCategories = nil; base.historyImport = nil
+        base.accounts = []; base.programs = []; base.claims = []; base.repayments = []; base.relationships = []; base.sourceBaselines = []; base.refundImports = []
         func item<T: Encodable>(_ value: T, _ field: String, _ key: String? = nil) throws { try emit(field, key, encoder().encode(value)) }
         try item(base, "workspace")
         for value in workspace.pending { try item(value, "pending") }
@@ -224,7 +219,6 @@ public enum BackupArchive {
         for value in workspace.sourceLinks { try item(value, "sourceLinks") }
         for key in workspace.drafts.keys.sorted() { try item(workspace.drafts[key]!, "drafts", key) }
         for value in workspace.discussionReplies ?? [] { try item(value, "discussionReplies") }
-        for key in (workspace.resolvedDiscussions ?? [:]).keys.sorted() { try item(workspace.resolvedDiscussions![key]!, "resolvedDiscussions", key) }
         for key in (workspace.discussionDrafts ?? [:]).keys.sorted() { try item(workspace.discussionDrafts![key]!, "discussionDrafts", key) }
         if let value = workspace.summaryVisibility { try item(value, "summaryVisibility") }
         for value in workspace.importReceipts ?? [] { try item(value, "importReceipts") }
@@ -233,12 +227,18 @@ public enum BackupArchive {
         for key in (workspace.discussionClosedRevisions ?? [:]).keys.sorted() { try item(workspace.discussionClosedRevisions![key]!, "discussionClosedRevisions", key) }
         for value in workspace.importedCategories ?? [] { try item(value, "importedCategories") }
         if let receipt = workspace.historyImport { try item(receipt, "historyImport") }
-        for key in (workspace.historyDetails ?? [:]).keys.sorted() { try item(workspace.historyDetails![key]!, "historyDetails", key) }
+        for value in workspace.accounts { try item(value, "accounts") }
+        for value in workspace.programs { try item(value, "programs") }
+        for value in workspace.claims { try item(value, "claims") }
+        for value in workspace.repayments { try item(value, "repayments") }
+        for value in workspace.relationships { try item(value, "relationships") }
+        for value in workspace.sourceBaselines { try item(value, "sourceBaselines") }
+        for value in workspace.refundImports { try item(value, "refundImports") }
     }
 
     private static func apply(_ data: Data, field: String, key: String?, to value: inout ReviewWorkspace) throws {
-        func decode<T: Decodable>(_ type: T.Type) throws -> T { try JSONDecoder().decode(type, from: data) }
-        let dictionaries: Set<String> = ["drafts", "resolvedDiscussions", "discussionDrafts", "discussionClosedRevisions", "historyDetails"]
+        func decode<T: Decodable>(_ type: T.Type) throws -> T { try StrictJSON.decode(type, from: data) }
+        let dictionaries: Set<String> = ["drafts", "discussionDrafts", "discussionClosedRevisions"]
         guard (key != nil) == dictionaries.contains(field) else { throw ExchangeError.invalid("Invalid archive entry key.") }
         switch field {
         case "pending": value.pending.append(try decode(FeedbackEvent.self))
@@ -250,7 +250,6 @@ public enum BackupArchive {
         case "sourceLinks": value.sourceLinks.append(try decode(SourceLink.self))
         case "drafts": value.drafts[key!] = try decode(Data.self)
         case "discussionReplies": if value.discussionReplies == nil { value.discussionReplies = [] }; value.discussionReplies?.append(try decode(UserDiscussionReply.self))
-        case "resolvedDiscussions": if value.resolvedDiscussions == nil { value.resolvedDiscussions = [:] }; value.resolvedDiscussions?[key!] = try decode(DiscussionBoundary.self)
         case "discussionDrafts": if value.discussionDrafts == nil { value.discussionDrafts = [:] }; value.discussionDrafts?[key!] = try decode(DiscussionDraft.self)
         case "summaryVisibility": guard value.summaryVisibility == nil else { throw ExchangeError.invalid("Duplicate visibility settings.") }; value.summaryVisibility = try decode(SummaryVisibility.self)
         case "importReceipts": if value.importReceipts == nil { value.importReceipts = [] }; value.importReceipts?.append(try decode(ImportReceipt.self))
@@ -259,7 +258,13 @@ public enum BackupArchive {
         case "discussionClosedRevisions": if value.discussionClosedRevisions == nil { value.discussionClosedRevisions = [:] }; value.discussionClosedRevisions?[key!] = try decode(String.self)
         case "importedCategories": if value.importedCategories == nil { value.importedCategories = [] }; value.importedCategories?.append(try decode(ReviewCategory.self))
         case "historyImport": guard value.historyImport == nil else { throw ExchangeError.invalid("Duplicate history import receipt.") }; value.historyImport = try decode(HistoryImportReceipt.self)
-        case "historyDetails": if value.historyDetails == nil { value.historyDetails = [:] }; value.historyDetails?[key!] = try decode([String: String].self)
+        case "accounts": value.accounts.append(try decode(AccountDefinition.self))
+        case "programs": value.programs.append(try decode(BenefitProgram.self))
+        case "claims": value.claims.append(try decode(ReimbursementClaim.self))
+        case "repayments": value.repayments.append(try decode(RepaymentAllocation.self))
+        case "relationships": value.relationships.append(try decode(RecordRelationship.self))
+        case "sourceBaselines": value.sourceBaselines.append(try decode(SourceBaseline.self))
+        case "refundImports": value.refundImports.append(try decode(RefundImportReceipt.self))
         default: throw ExchangeError.invalid("Unsupported archive section: " + field)
         }
     }

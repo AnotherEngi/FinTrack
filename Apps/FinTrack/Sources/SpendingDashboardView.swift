@@ -24,7 +24,7 @@ struct OverviewView: View {
         guard scope.isValid else { throw LedgerError.invalidDate }
         return try SummaryReport(records: ledger.records, catalog: ledger.catalog,
             from: scope.selection.from, through: scope.selection.through,
-            visibility: visibility, showHidden: showHidden, excludedCategories: categories)
+            visibility: visibility, showHidden: showHidden, excludedCategories: categories, workspace: ledger.workspace)
     }
 
     var body: some View {
@@ -77,7 +77,10 @@ struct OverviewView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 20) {
                 Text("Spending " + data.total.decimalText).monospacedDigit()
+                Text("Gross purchases " + data.grossPurchases.decimalText).monospacedDigit().foregroundStyle(.secondary)
                 Text("Pending " + data.pending.decimalText).monospacedDigit().foregroundStyle(.secondary)
+                Text("Receipts " + data.receipts.decimalText).monospacedDigit()
+                Text("Purchase net cost " + data.netCost.decimalText).monospacedDigit()
                 Spacer()
                 if !data.unallocatedRefundIDs.isEmpty {
                     Button("Link refunds: " + data.unallocatedRefundAmount.decimalText) { selection = .unallocated }
@@ -113,7 +116,8 @@ struct OverviewView: View {
                     .padding(12).frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14))
             }.frame(maxHeight: .infinity)
-            Text("Linked refunds reduce original purchase dates. Unlinked refunds need allocation. Missing history is unknown.")
+            if !data.limitations.isEmpty { Text(data.limitations.joined(separator: " ")).font(.caption2).foregroundStyle(.orange).lineLimit(2) }
+            Text("Spending deducts linked refunds on purchase dates. Net cost also deducts assigned repayments for these purchases, regardless of receipt date; Receipts uses receipt dates.")
                 .font(.caption2).foregroundStyle(.secondary)
         }
     }
@@ -249,9 +253,9 @@ struct OverviewView: View {
         VStack(alignment: .leading, spacing: 3) {
             if let record = ledger.record(id: row.recordID) {
                 Button { editor = ledger.editor(for: record) } label: {
-                    HStack { Text(record.draft.payee); Spacer(); Text(row.net.decimalText).monospacedDigit() }
+                    HStack { Text(record.draft.payee); Spacer(); Text(selectedAmount(row).decimalText).monospacedDigit() }
                 }.buttonStyle(.plain)
-                Text(row.date.iso8601 + " · " + categoryLabel(row.categoryID)).font(.caption).foregroundStyle(.secondary)
+                Text(row.date.iso8601 + " · " + row.categoryAmounts.keys.sorted().map { categoryLabel($0) }.joined(separator: ", ")).font(.caption).foregroundStyle(.secondary)
                 if !row.refundIDs.isEmpty {
                     Text("Purchase " + record.draft.amount.decimalText + "; linked refunds deducted")
                         .font(.caption2).foregroundStyle(.secondary)
@@ -268,8 +272,12 @@ struct OverviewView: View {
 
     private func selectedPurchases(_ data: SummaryReport, context: SummaryContext) -> [SummaryPurchase] {
         data.purchases.filter { row in
-            switch context { case .period(let id): row.periodID == id; case .category(let id): row.categoryID == id; case .unallocated: false }
+            switch context { case .period(let id): row.periodID == id; case .category(let id): row.categoryAmounts[id] != nil; case .unallocated: false }
         }
+    }
+    private func selectedAmount(_ row: SummaryPurchase) -> Money {
+        if case .category(let id) = selection { return row.categoryAmounts[id] ?? Money(minorUnits: 0) }
+        return row.net
     }
     private func contextTitle(_ data: SummaryReport) -> String {
         switch selection {

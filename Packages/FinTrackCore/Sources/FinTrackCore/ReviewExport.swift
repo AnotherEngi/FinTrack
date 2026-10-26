@@ -39,7 +39,8 @@ public struct ReviewPacket: Codable, Sendable {
         public let treatment: TransactionTreatment
         public let categoryID: String?
         public let tags: [String]
-        public let exceptionalEvent: Bool
+        public let exceptionalEvent: Bool?
+        public let reportedExceptional: SourceValue
         public let approval: ApprovalStatus
         public let discussionRequested: Bool
         public let discussionProgress: DiscussionProgress?
@@ -49,6 +50,15 @@ public struct ReviewPacket: Codable, Sendable {
         public let userAnswer: String?
         public let assistantContext: AssistantContext?
         public let refundAllocations: [RefundAllocation]?
+        public let allocations: [ExpenseAllocation]
+        public let primarySubcategoryID: String?
+        public let sourceVersions: [SourceVersion]
+        public let historicalDecisions: [HistoricalDecision]
+        public let sourceNotes: [SourceText]
+        public let archivalFields: [String: ArchivalField]
+        public let reportedVisibility: SourceValue
+        public let questionState: QuestionState
+        public let sourceReportDate: TransactionDate?
     }
 }
 
@@ -74,22 +84,36 @@ public struct ReviewExport: Sendable {
         }
         let rows = try sorted.map { record -> ReviewPacket.Record in
             try record.draft.validate()
+            func include(_ ownership: TextOwnership) -> Bool {
+                switch ownership {
+                case .userNote, .userAnswer: options.includeUserContext
+                case .assistantQuestion, .assistantReason: options.includeAssistantContext
+                case .mixed, .unknown: options.includeUserContext && options.includeAssistantContext
+                case .ledgerFact: true
+                }
+            }
+            var versions = record.draft.sourceVersions
+            for index in versions.indices { versions[index].notes = versions[index].notes.filter { include($0.ownership) } }
             return ReviewPacket.Record(transactionID: record.id, baseRevision: String(record.revision),
                 date: record.draft.date.iso8601, activityDate: record.draft.activityDate?.iso8601,
                 payee: record.draft.payee, amountMinorUnits: String(record.draft.amount.minorUnits),
                 amountDecimal: record.draft.amount.decimalText, currency: record.draft.amount.currency.rawValue,
                 postingStatus: record.draft.postingStatus, treatment: record.draft.treatment,
                 categoryID: record.draft.categoryID, tags: record.draft.tags.sorted(),
-                exceptionalEvent: record.draft.exceptionalEvent, approval: record.approval,
+                exceptionalEvent: record.draft.exceptionalEvent, reportedExceptional: record.draft.reportedExceptional, approval: record.approval,
                 discussionRequested: record.discussionRequested,
                 discussionProgress: record.discussionProgress, source: record.draft.source,
                 classificationProvenance: record.classificationProvenance,
                 userNote: options.includeUserContext ? record.draft.notes : nil,
                 userAnswer: options.includeUserContext ? record.draft.answer : nil,
                 assistantContext: options.includeAssistantContext ? record.assistantContext : nil,
-                refundAllocations: record.draft.refundAllocations)
+                refundAllocations: record.draft.refundAllocations,
+                allocations: record.draft.allocations, primarySubcategoryID: record.draft.primarySubcategoryID,
+                sourceVersions: versions, historicalDecisions: record.draft.historicalDecisions,
+                sourceNotes: record.draft.sourceNotes.filter { include($0.ownership) }, archivalFields: record.draft.archivalFields.filter { include($0.value.ownership) },
+                reportedVisibility: record.draft.reportedVisibility, questionState: record.draft.questionState, sourceReportDate: record.draft.sourceReportDate)
         }
-        packet = ReviewPacket(schemaVersion: 1, purpose: "fintrack-review-export",
+        packet = ReviewPacket(schemaVersion: FinancialFormat.version, purpose: "fintrack-review-export",
             packetID: packetID, exportedAt: ISO8601DateFormatter().string(from: exportedAt),
             amountSignConvention: Money.amountSignConvention,
             coverage: "Selected saved records only; source coverage and missing periods are unknown.",
@@ -102,7 +126,7 @@ public struct ReviewExport: Sendable {
         var columns = ["transaction_id", "base_revision", "date", "activity_date", "payee",
             "amount_minor_units", "amount_decimal", "currency", "posting_status", "treatment",
             "source_id", "source_label", "category_id", "category_label", "tags_json", "exceptional_event", "approval", "discussion_requested",
-            "discussion_progress", "category_origin", "tag_origins_json", "refund_allocations_json"]
+            "discussion_progress", "category_origin", "tag_origins_json", "refund_allocations_json", "structured_record_json"]
         if options.includeUserContext { columns += ["user_note", "user_answer"] }
         if options.includeAssistantContext { columns += ["assistant_question", "assistant_reason", "earlier_ledger_notes"] }
         var lines = [columns.map(Self.csvCell).joined(separator: ",")]
@@ -115,11 +139,12 @@ public struct ReviewExport: Sendable {
                 Self.csvCell(row.source?.id.uuidString ?? ""), Self.csvCell(row.source?.label ?? ""),
                 Self.csvCell(row.categoryID ?? ""), Self.csvCell(catalog.category(id: row.categoryID)?.label ?? ""),
                 Self.csvCell(String(decoding: try encoder.encode(row.tags), as: UTF8.self)),
-                Self.csvCell(String(row.exceptionalEvent)), Self.csvCell(row.approval.rawValue),
+                Self.csvCell(row.exceptionalEvent.map { String($0) } ?? "unknown"), Self.csvCell(row.approval.rawValue),
                 Self.csvCell(String(row.discussionRequested)), Self.csvCell(row.discussionProgress?.rawValue ?? ""),
                 Self.csvCell(row.classificationProvenance.category.rawValue),
                 Self.csvCell(String(decoding: try encoder.encode(row.classificationProvenance.tags), as: UTF8.self)),
-                Self.csvCell(String(decoding: try encoder.encode(row.refundAllocations ?? []), as: UTF8.self))]
+                Self.csvCell(String(decoding: try encoder.encode(row.refundAllocations ?? []), as: UTF8.self)),
+                Self.csvCell(String(decoding: try encoder.encode(row), as: UTF8.self))]
             if options.includeUserContext { cells += [Self.csvCell(row.userNote ?? ""), Self.csvCell(row.userAnswer ?? "")] }
             if let context = row.assistantContext {
                 cells += [Self.csvCell(context.question), Self.csvCell(context.reason), Self.csvCell(context.ledgerNotes)]

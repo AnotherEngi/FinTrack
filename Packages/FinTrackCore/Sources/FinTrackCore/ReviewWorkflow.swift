@@ -60,7 +60,7 @@ public struct FeedbackEvent: Codable, Equatable, Identifiable, Sendable {
         let value = record.draft
         let allocations = (value.refundAllocations ?? []).sorted { $0.purchaseID.uuidString < $1.purchaseID.uuidString }
         let allocationText = allocations.map {
-            $0.purchaseID.uuidString + ":" + String($0.amount.minorUnits) + ":" + $0.amount.currency.rawValue
+            $0.purchaseID.uuidString + ":" + ($0.allocationID?.uuidString ?? "unattributed") + ":" + String($0.amount.minorUnits) + ":" + $0.amount.currency.rawValue
         }.joined(separator: "; ")
         return ["date": value.date.iso8601, "activityDate": value.activityDate?.iso8601 ?? "",
             "merchant": value.payee, "amountMinorUnits": String(value.amount.minorUnits),
@@ -68,9 +68,11 @@ public struct FeedbackEvent: Codable, Equatable, Identifiable, Sendable {
             "tags": value.tags.sorted().joined(separator: "; "), "userNote": value.notes, "userAnswer": value.answer,
             "sourceLabel": value.source?.label ?? "", "sourceID": value.source?.id.uuidString ?? "",
             "postingStatus": value.postingStatus.rawValue, "treatment": value.treatment.rawValue,
-            "exceptionalEvent": String(value.exceptionalEvent), "approval": record.approval.rawValue,
+            "exceptionalEvent": value.exceptionalEvent.map { String($0) } ?? "unknown", "approval": record.approval.rawValue,
             "discussion": record.discussionProgress?.rawValue ?? "",
-            "refundAllocations": allocationText]
+            "refundAllocations": allocationText,
+            "primarySubcategoryID": value.primarySubcategoryID ?? "",
+            "expenseAllocations": value.allocations.map { $0.id.uuidString + ":" + $0.categoryID + ":" + ($0.subcategoryID ?? "") + ":" + String($0.amount.minorUnits) }.joined(separator: "; ")]
     }
 
     private init(id: UUID, recordID: UUID?, beforeRevision: String?, afterRevision: String?,
@@ -97,6 +99,8 @@ public struct FeedbackEvent: Codable, Equatable, Identifiable, Sendable {
         if old.draft.amount != new.draft.amount { fields.append("amount") }
         if (old.draft.refundAllocations ?? []) != (new.draft.refundAllocations ?? []) { fields.append("refund allocations") }
         if old.draft.categoryID != new.draft.categoryID { fields.append("category") }
+        if old.draft.allocations != new.draft.allocations { fields.append("expense allocations") }
+        if old.draft.primarySubcategoryID != new.draft.primarySubcategoryID { fields.append("subcategory") }
         if old.draft.tags != new.draft.tags { fields.append("tags") }
         if old.draft.notes != new.draft.notes { fields.append("user note") }
         if old.draft.answer != new.draft.answer { fields.append("user answer") }
@@ -141,10 +145,11 @@ public struct ReviewEnvelope: Codable, Sendable {
     public let snapshot: ReviewPacket?
     public let returnTemplate: ReviewResponse
     public let discussionContext: [DiscussionThread]?
-    public var historyContext: [String: [String: String]]? = nil
+    public var historyContext: [String: [String: ArchivalField]]? = nil
+    public var financialContext: FinancialContext
 
     private enum CodingKeys: String, CodingKey {
-        case schemaVersion, purpose, instructions, manifest, feedback, knowledge, snapshot, returnTemplate, discussionContext, historyContext
+        case schemaVersion, purpose, instructions, manifest, feedback, knowledge, snapshot, returnTemplate, discussionContext, historyContext, financialContext
     }
     public func encode(to encoder: any Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
@@ -155,6 +160,7 @@ public struct ReviewEnvelope: Codable, Sendable {
         try c.encode(ResponseTemplate(value: returnTemplate), forKey: .returnTemplate)
         try c.encodeIfPresent(discussionContext, forKey: .discussionContext)
         try c.encodeIfPresent(historyContext, forKey: .historyContext)
+        try c.encode(financialContext, forKey: .financialContext)
     }
 }
 
@@ -173,11 +179,14 @@ public struct ClassificationProposal: Codable, Equatable, Identifiable, Sendable
     public let tags: [String]?
     public let question: String?
     public let rationale: String
+    public var primarySubcategoryID: String?
+    public var allocations: [ExpenseAllocation]?
     public init(id: UUID = UUID(), recordID: UUID, expectedRevision: String,
                 categoryID: String? = nil, tags: [String]? = nil, question: String? = nil,
-                rationale: String) {
+                rationale: String, primarySubcategoryID: String? = nil, allocations: [ExpenseAllocation]? = nil) {
         self.id = id; self.recordID = recordID; self.expectedRevision = expectedRevision
         self.categoryID = categoryID; self.tags = tags; self.question = question; self.rationale = rationale
+        self.primarySubcategoryID = primarySubcategoryID; self.allocations = allocations
     }
 }
 
@@ -205,7 +214,7 @@ public struct ReviewResponse: Codable, Sendable {
     public init(id: UUID = UUID(), packetID: UUID, knowledgeVersion: UUID,
                 acknowledgedOperationIDs: [UUID] = [], proposals: [ClassificationProposal] = [],
                 knowledgeProposals: [KnowledgeProposal] = [], summary: String = "", answers: [DiscussionAnswer] = []) {
-        schemaVersion = 1; purpose = "fintrack-review-response"
+        schemaVersion = FinancialFormat.version; purpose = "fintrack-review-response"
         self.id = id; self.packetID = packetID; self.knowledgeVersion = knowledgeVersion
         self.acknowledgedOperationIDs = acknowledgedOperationIDs; self.proposals = proposals
         self.knowledgeProposals = knowledgeProposals; self.summary = summary
@@ -226,7 +235,7 @@ public struct ReviewResponse: Codable, Sendable {
         proposals = try c.decode([ClassificationProposal].self, forKey: .proposals)
         knowledgeProposals = try c.decode([KnowledgeProposal].self, forKey: .knowledgeProposals)
         summary = try c.decode(String.self, forKey: .summary)
-        answers = try c.decodeIfPresent([DiscussionAnswer].self, forKey: .answers) ?? []
+        answers = try c.decode([DiscussionAnswer].self, forKey: .answers)
     }
     public func encode(to encoder: any Encoder) throws {
         try encode(to: encoder, includeEmptyAnswers: false)
@@ -239,8 +248,7 @@ public struct ReviewResponse: Codable, Sendable {
         try c.encode(acknowledgedOperationIDs, forKey: .acknowledgedOperationIDs)
         try c.encode(proposals, forKey: .proposals); try c.encode(knowledgeProposals, forKey: .knowledgeProposals)
         try c.encode(summary, forKey: .summary)
-        // Keep canonical bytes of older v1 responses unchanged when this is empty.
-        if includeEmptyAnswers || !answers.isEmpty { try c.encode(answers, forKey: .answers) }
+        try c.encode(answers, forKey: .answers)
     }
 }
 
@@ -264,6 +272,11 @@ public struct WeeklyTransaction: Codable, Equatable, Sendable {
     public let treatment: TransactionTreatment
     public let categoryID: String?
     public let tags: [String]
+    public var primarySubcategoryID: String? = nil
+    public var allocations: [ExpenseAllocation] = []
+    public var sourceReportDate: TransactionDate? = nil
+    public var timestamp: TimestampEvidence? = nil
+    public var sourceNotes: [SourceText] = []
     public init(identity: BankIdentity, date: String, activityDate: String? = nil, merchant: String,
                 amountMinorUnits: String, currency: String = "USD", postingStatus: PostingStatus = .posted,
                 treatment: TransactionTreatment = .spending, categoryID: String? = nil, tags: [String] = []) {
@@ -272,6 +285,8 @@ public struct WeeklyTransaction: Codable, Equatable, Sendable {
         self.postingStatus = postingStatus; self.treatment = treatment; self.categoryID = categoryID; self.tags = tags
     }
     public func draft(sourceID: UUID = UUID()) throws -> TransactionDraft {
+        try requireFinance(sourceNotes.allSatisfy { ![TextOwnership.assistantQuestion, .assistantReason].contains($0.ownership) },
+            "Weekly financial observations cannot archive transient assistant questions/reasons. Return discussion text in a separate review response.")
         guard let amount = Int64(amountMinorUnits), String(amount) == amountMinorUnits,
               let currency = Currency(rawValue: currency), merchant.count <= 500,
               !identity.sourceAlias.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
@@ -280,11 +295,18 @@ public struct WeeklyTransaction: Codable, Equatable, Sendable {
               identity.transactionID.count <= 250 else {
             throw ExchangeError.invalid("Weekly records need exact integer amounts and genuine source transaction IDs, scoped to a source alias.")
         }
-        let value = try TransactionDraft(date: TransactionDate(date), payee: merchant,
+        var value = try TransactionDraft(date: TransactionDate(date), payee: merchant,
             amount: Money(minorUnits: amount, currency: currency), postingStatus: postingStatus,
             treatment: treatment, categoryID: categoryID, tags: tags,
             activityDate: activityDate.map { try TransactionDate($0) },
             source: TransactionSource(id: sourceID, label: identity.sourceAlias))
+        value.primarySubcategoryID = primarySubcategoryID; value.allocations = allocations
+        value.sourceReportDate = sourceReportDate; value.sourceNotes = sourceNotes
+        value.sourceVersions = [SourceVersion(identity: identity, date: value.date, activityDate: value.activityDate,
+            reportDate: sourceReportDate, timestamp: timestamp, merchant: merchant, amount: value.amount,
+            observedStatus: postingStatus, notes: sourceNotes.filter { ![.assistantQuestion, .assistantReason].contains($0.ownership) })]
+        value.sourceVersions[0].treatment = treatment; value.sourceVersions[0].categoryID = categoryID
+        value.sourceVersions[0].subcategoryID = primarySubcategoryID; value.sourceVersions[0].allocations = allocations; value.sourceVersions[0].tags = tags
         try value.validate()
         return value
     }
@@ -297,7 +319,7 @@ public struct WeeklyBatch: Codable, Sendable {
     public let coverage: String
     public let transactions: [WeeklyTransaction]
     public init(id: UUID = UUID(), coverage: String, transactions: [WeeklyTransaction]) {
-        schemaVersion = 1; purpose = "fintrack-weekly-intake"
+        schemaVersion = FinancialFormat.version; purpose = "fintrack-weekly-intake"
         self.id = id; self.coverage = coverage; self.transactions = transactions
     }
 }
@@ -335,9 +357,7 @@ public struct ReviewWorkspace: Codable, Sendable {
     public var knowledge: [KnowledgeRule] = []
     public var sourceLinks: [SourceLink] = []
     public var drafts: [String: Data] = [:]
-    public var legacyDraftsMigrated = false
     public var discussionReplies: [UserDiscussionReply]?
-    public var resolvedDiscussions: [String: DiscussionBoundary]?
     public var discussionDrafts: [String: DiscussionDraft]?
     public var summaryVisibility: SummaryVisibility?
     public var importReceipts: [ImportReceipt]?
@@ -346,7 +366,14 @@ public struct ReviewWorkspace: Codable, Sendable {
     public var discussionClosedRevisions: [String: String]?
     public var importedCategories: [ReviewCategory]?
     public var historyImport: HistoryImportReceipt?
-    public var historyDetails: [String: [String: String]]?
+    public var accounts: [AccountDefinition] = []
+    public var programs: [BenefitProgram] = []
+    public var claims: [ReimbursementClaim] = []
+    public var repayments: [RepaymentAllocation] = []
+    public var relationships: [RecordRelationship] = []
+    public var sourceBaselines: [SourceBaseline] = []
+    public var reporting = ReportingConfiguration()
+    public var refundImports: [RefundImportReceipt] = []
     public init() {}
 
     public mutating func recordUserChange(before: LedgerTransaction?, after: LedgerTransaction, kind: String = "user-edit") {
@@ -380,7 +407,7 @@ public struct ReviewWorkspace: Codable, Sendable {
 
     private mutating func prepareSnapshot(records: [LedgerTransaction], catalog: ReviewCatalog,
                                          mode: ReviewMode, at: Date) throws -> ReviewEnvelope {
-        try RefundAccounting.validate(records: records)
+        try FinancialAccounting.validate(records: records, workspace: self, catalog: catalog)
         establishBaseline(records: records)
         let threads = discussions(in: records)
         let open = Set(threads.filter { !$0.isResolved && $0.status != .draft }.map(\.recordID))
@@ -388,14 +415,28 @@ public struct ReviewWorkspace: Codable, Sendable {
             throw ExchangeError.invalid("No pending feedback. Use Full history review to analyze the ledger.")
         }
         var ids = Set(pending.compactMap(\.recordID)).union(open)
-        let originalIDs = ids
+        if pending.contains(where: { $0.kind == "financial-settings" }) { ids.formUnion(records.map(\.id)) }
+        var adjacency: [UUID: Set<UUID>] = [:]
+        func connect(_ a: UUID, _ b: UUID) { adjacency[a, default: []].insert(b); adjacency[b, default: []].insert(a) }
         for refund in records {
-            let purchases = Set((refund.draft.refundAllocations ?? []).map(\.purchaseID))
-            if originalIDs.contains(refund.id) || !purchases.isDisjoint(with: originalIDs) {
-                ids.insert(refund.id); ids.formUnion(purchases)
-            }
+            for link in refund.draft.refundAllocations ?? [] { connect(refund.id, link.purchaseID) }
+        }
+        let claimsByID = Dictionary(uniqueKeysWithValues: claims.map { ($0.id, $0) })
+        for repayment in repayments { if let claim = claimsByID[repayment.claimID] { connect(claim.expenseID, repayment.receiptID) } }
+        for relationship in relationships { connect(relationship.from, relationship.to) }
+        var queue = Array(ids), index = 0
+        while index < queue.count {
+            let id = queue[index]; index += 1
+            for linked in adjacency[id] ?? [] where ids.insert(linked).inserted { queue.append(linked) }
         }
         let selected = mode == .fullHistory ? records : records.filter { ids.contains($0.id) }
+        var financialContext = FinancialContext(workspace: self)
+        if mode != .fullHistory {
+            financialContext.claims = claims.filter { ids.contains($0.expenseID) }
+            let selectedClaims = Set(financialContext.claims.map(\.id))
+            financialContext.repayments = repayments.filter { selectedClaims.contains($0.claimID) }
+            financialContext.relationships = relationships.filter { ids.contains($0.from) && ids.contains($0.to) }
+        }
         let export: ReviewExport? = selected.isEmpty ? nil : try ReviewExport(records: selected,
             catalog: catalog, options: .init(includeUserContext: true, includeAssistantContext: true), exportedAt: at)
         let manifest = ReviewManifest(id: UUID(), mode: mode, operationIDs: pending.map(\.id),
@@ -403,11 +444,12 @@ public struct ReviewWorkspace: Codable, Sendable {
             knowledgeVersion: knowledgeVersion, createdAt: at,
             discussionRecordIDs: threads.filter { !$0.isResolved && $0.status != .draft }.map(\.recordID))
         let template = ReviewResponse(packetID: manifest.id, knowledgeVersion: knowledgeVersion)
-        let envelope = ReviewEnvelope(schemaVersion: 1, purpose: "fintrack-review-request",
+        let envelope = ReviewEnvelope(schemaVersion: FinancialFormat.version, purpose: "fintrack-review-request",
             instructions: Self.instructions, manifest: manifest, feedback: pending,
             knowledge: knowledge, snapshot: export?.packet, returnTemplate: template,
             discussionContext: threads.filter { thread in selected.contains { $0.id == thread.recordID } },
-            historyContext: historyDetails.map { details in details.filter { manifest.recordRevisions[$0.key] != nil } })
+            historyContext: Dictionary(uniqueKeysWithValues: selected.map { ($0.id.uuidString, $0.draft.archivalFields) }),
+            financialContext: financialContext)
         _ = try ExchangeJSON.encode(envelope)
         manifests.append(manifest)
         return envelope
@@ -416,12 +458,11 @@ public struct ReviewWorkspace: Codable, Sendable {
     public mutating func stage(_ data: Data) throws {
         struct Header: Decodable { let purpose: String; let schemaVersion: Int; let id: UUID }
         let header = try ExchangeJSON.decode(Header.self, from: data)
-        guard header.schemaVersion == 1 else { throw ExchangeError.invalid("Unsupported incoming schema version.") }
-        try Self.checkIncomingKeys(data, purpose: header.purpose)
+        guard header.schemaVersion == FinancialFormat.version else { throw ExchangeError.invalid("Unsupported incoming schema version.") }
         let canonical: Data
         switch header.purpose {
         case "fintrack-review-response":
-            let response = try ExchangeJSON.decode(ReviewResponse.self, from: data)
+            let response = try StrictJSON.decode(ReviewResponse.self, from: data)
             canonical = try ExchangeJSON.encode(response)
             if let receipt = importReceipts?.first(where: { $0.id == header.id }) {
                 guard receipt.purpose == header.purpose, receipt.digest == ContentDigest.sha256(canonical) else {
@@ -434,7 +475,7 @@ public struct ReviewWorkspace: Codable, Sendable {
             }
             try validate(response)
         case "fintrack-weekly-intake":
-            let batch = try ExchangeJSON.decode(WeeklyBatch.self, from: data)
+            let batch = try StrictJSON.decode(WeeklyBatch.self, from: data)
             guard batch.transactions.count <= 10_000, batch.coverage.count <= 10_000,
                   Set(batch.transactions.map(\.identity)).count == batch.transactions.count else {
                 throw ExchangeError.invalid("Weekly batch is too large or repeats a source transaction ID.")
@@ -468,35 +509,8 @@ public struct ReviewWorkspace: Codable, Sendable {
         staged.append(StagedFile(id: header.id, data: canonical, purpose: header.purpose, resolved: false))
     }
 
-    private static func checkIncomingKeys(_ data: Data, purpose: String) throws {
-        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            throw ExchangeError.invalid("Incoming JSON must be an object.")
-        }
-        func keys(_ object: [String: Any], _ allowed: Set<String>) throws {
-            guard Set(object.keys).isSubset(of: allowed) else { throw ExchangeError.invalid("The incoming file contains unsupported fields. No changes were applied.") }
-        }
-        if purpose == "fintrack-review-response" {
-            try keys(object, ["schemaVersion", "purpose", "id", "packetID", "knowledgeVersion", "acknowledgedOperationIDs", "proposals", "knowledgeProposals", "summary", "answers"])
-            for answer in object["answers"] as? [[String: Any]] ?? [] {
-                try keys(answer, ["id", "recordID", "expectedRevision", "text", "questionForUser"])
-            }
-            for proposal in object["proposals"] as? [[String: Any]] ?? [] {
-                try keys(proposal, ["id", "recordID", "expectedRevision", "categoryID", "tags", "question", "rationale"])
-            }
-            for proposal in object["knowledgeProposals"] as? [[String: Any]] ?? [] {
-                try keys(proposal, ["id", "replacingRuleID", "text", "rationale"])
-            }
-        } else if purpose == "fintrack-weekly-intake" {
-            try keys(object, ["schemaVersion", "purpose", "id", "coverage", "transactions"])
-            for transaction in object["transactions"] as? [[String: Any]] ?? [] {
-                try keys(transaction, ["identity", "date", "activityDate", "merchant", "amountMinorUnits", "currency", "postingStatus", "treatment", "categoryID", "tags"])
-                if let identity = transaction["identity"] as? [String: Any] { try keys(identity, ["sourceAlias", "transactionID"]) }
-            }
-        }
-    }
-
     public func validate(_ response: ReviewResponse) throws {
-        guard response.schemaVersion == 1, response.purpose == "fintrack-review-response",
+        guard response.schemaVersion == FinancialFormat.version, response.purpose == "fintrack-review-response",
               let manifest = manifests.first(where: { $0.id == response.packetID }),
               response.knowledgeVersion == manifest.knowledgeVersion,
               Set(response.acknowledgedOperationIDs).count == response.acknowledgedOperationIDs.count,
@@ -508,6 +522,9 @@ public struct ReviewWorkspace: Codable, Sendable {
         guard Set(proposalIDs).count == proposalIDs.count else { throw ExchangeError.invalid("Duplicate proposal IDs.") }
         try validateAnswers(response, manifest: manifest)
         for proposal in response.proposals {
+            try requireFinance(proposal.categoryID != nil || proposal.tags != nil || proposal.primarySubcategoryID != nil || proposal.allocations != nil,
+                "Plain replies belong in answers, not classification proposals.")
+            try requireFinance((proposal.allocations?.count ?? 0) <= 100 && (proposal.primarySubcategoryID?.count ?? 0) <= 120, "Oversized classification proposal.")
             guard manifest.recordRevisions[proposal.recordID.uuidString] == proposal.expectedRevision,
                   let revision = Int64(proposal.expectedRevision), revision > 0,
                   String(revision) == proposal.expectedRevision, proposal.rationale.count <= 10_000,
@@ -576,7 +593,9 @@ public struct ReviewWorkspace: Codable, Sendable {
     discussion reply or clarification in a classification proposal. Questions for the user
     belong in answers.questionForUser. The user may reply or mark a discussion resolved.
     Each proposal needs a unique UUID id, recordID, exact string expectedRevision from manifest,
-    rationale, and optionally categoryID, tags (complete replacement list). Omitted/null
+    rationale, and optionally categoryID, primarySubcategoryID (empty string clears it),
+    allocations (complete exact balanced ExpenseAllocation array; empty removes a split),
+    tags (complete replacement list). Never invent a split. Omitted/null
     fields mean no change. Category IDs must come from snapshot.categories. Do not change amounts,
     source facts, user notes/answers, approval, or record IDs. Questions are assistant-authored.
     Refund allocations link positive amounts to original purchase IDs. Keep the actual refund
@@ -586,11 +605,16 @@ public struct ReviewWorkspace: Codable, Sendable {
     allocations through discussion answers. Refund links are read-only in this response contract.
     knowledgeProposals have id, optional replacingRuleID, text, rationale. Suggest scoped rules,
     not blanket conclusions from one correction. The user explicitly accepts/rejects proposals.
-    For new weekly bank data use a SEPARATE fintrack-weekly-intake v1 file: id UUID, coverage text,
+    For new weekly bank data use a SEPARATE fintrack-weekly-intake v2 file: id UUID, coverage text,
     transactions array of identity {sourceAlias, transactionID}, date YYYY-MM-DD, optional
     activityDate, merchant, amountMinorUnits exact decimal integer STRING, currency USD,
     postingStatus posted/pending/unresolved, treatment spending/refund/income/payment/
-    statementCredit/transfer/unresolved, optional categoryID, tags array. Positive outflows,
+    statementCredit/transfer/reimbursementReceipt/unresolved, optional categoryID, tags array.
+    Also include allocations [], sourceNotes [], optional primarySubcategoryID,
+    sourceReportDate YYYY-MM-DD string, timestamp {original,timeZone?,precision?} when known.
+    financialContext contains claims, actual receipt allocations, programs and coverage settings.
+    Expected or source-reported reimbursements never substitute for actual assigned receipts.
+    Positive outflows,
     negative refunds/income. Use genuine provider IDs and disclose source/date gaps. Never invent
     IDs or turn estimates into retrieved facts. Changed source facts require manual reconciliation.
     Feedback/manifest createdAt timestamps are seconds since 2001-01-01 UTC; transaction dates
@@ -610,7 +634,13 @@ extension LedgerTransaction {
             value.categoryID = category
         }
         if let tags = proposal.tags { value.tags = tags }
+        if let subcategory = proposal.primarySubcategoryID { value.primarySubcategoryID = subcategory.isEmpty ? nil : subcategory }
+        if let parts = proposal.allocations {
+            value.allocations = parts.map { var part = $0; part.origin = .assistant; return part }
+        }
+        if value.questionState == .resolved { value.questionState = proposal.question?.isEmpty == false ? .open : .none }
         try value.validate()
+        try value.validateAllocations(catalog: catalog)
         let revised = try revising(with: value, expectedRevision: revision)
         let context = AssistantContext(question: proposal.question ?? assistantContext.question,
             reason: proposal.rationale, ledgerNotes: assistantContext.ledgerNotes)
@@ -635,12 +665,12 @@ public struct FullBackup: Codable, Sendable {
     public let records: [LedgerTransaction]
     public let workspace: ReviewWorkspace
     public init(records: [LedgerTransaction], workspace: ReviewWorkspace, at: Date = .now) {
-        schemaVersion = 1; purpose = "fintrack-full-backup"; amountSignConvention = Money.amountSignConvention
+        schemaVersion = FinancialFormat.version; purpose = "fintrack-full-backup"; amountSignConvention = Money.amountSignConvention
         createdAt = at; self.records = records; self.workspace = workspace
     }
     public func validate(catalog: ReviewCatalog) throws {
         let catalog = try workspace.effectiveCatalog(fallback: catalog)
-        guard schemaVersion == 1, purpose == "fintrack-full-backup",
+        guard schemaVersion == FinancialFormat.version, purpose == "fintrack-full-backup",
               amountSignConvention == Money.amountSignConvention,
               records.count <= BackupCapacity.maximumRecords, Set(records.map(\.id)).count == records.count,
               Set(workspace.pending.map(\.id)).count == workspace.pending.count,
@@ -664,6 +694,7 @@ public struct FullBackup: Codable, Sendable {
         try workspace.validateRetention(records: records)
         try workspace.summaryVisibility?.validate(recordIDs: ids)
         try RefundAccounting.validate(records: records)
+        try FinancialAccounting.validate(records: records, workspace: workspace, catalog: catalog)
         let revisions = Dictionary(uniqueKeysWithValues: records.map { ($0.id, $0.revision) })
         let replies = workspace.discussionReplies ?? []
         guard Set(replies.map(\.id)).count == replies.count else { throw ExchangeError.invalid("Duplicate discussion reply IDs in backup.") }
@@ -679,9 +710,6 @@ public struct FullBackup: Codable, Sendable {
                   let revision = Int64(draft.expectedRevision), revision > 0, String(revision) == draft.expectedRevision,
                   revision <= (revisions[draft.recordID] ?? 0),
                   draft.text.count <= 10_000 else { throw ExchangeError.invalid("Invalid discussion draft in backup.") }
-        }
-        for key in (workspace.resolvedDiscussions ?? [:]).keys {
-            guard let id = UUID(uuidString: key), ids.contains(id) else { throw ExchangeError.invalid("Invalid resolved discussion in backup.") }
         }
         for record in records { try record.draft.validate(); try record.validateReviewState(catalog: catalog) }
         for event in workspace.pending {

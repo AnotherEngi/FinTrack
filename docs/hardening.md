@@ -1,5 +1,16 @@
 # Exchange and backup hardening pass
 
+Current financial-framework pass: [validation and capability matrix](framework-validation.md).
+The new pass removes prototype compatibility, validates current typed graphs and
+nested incoming keys, rejects essential omissions/missing preserved cells and
+duplicate deferred IDs, preserves same-provider source versions, keeps original
+baselines read-only, and includes connected receipt/purchase/refund review context.
+It also fixes Foundation Data decoding in framed archive entries, source evidence
+rollback, autosave text/ID stability, stale editor evidence after approval, and
+hidden invalid financial-settings input. These changes have portable regressions;
+SwiftUI/SwiftData runtime and compressed iCloud/device checks remain native work.
+Use the linked record for current counts; earlier notes below are historical.
+
 Latest user-decision follow-up blocks the app's initial-history action at both
 the preview button and view-model boundary, marks v1 migration instructions as
 synthetic-only, and preserves the new full-framework prerequisite. Reporting

@@ -4,7 +4,7 @@ import FinTrackCore
 
 @MainActor
 public final class LocalTransactionRepository: TransactionRepository {
-    private typealias Row = LedgerSchemaV2.StoredTransaction
+    private typealias Row = LedgerSchema.StoredTransaction
     private let container: ModelContainer
     private let context: ModelContext
     private let commit: (ModelContext) throws -> Void
@@ -21,10 +21,10 @@ public final class LocalTransactionRepository: TransactionRepository {
         try FileManager.default.createDirectory(at: storeURL.deletingLastPathComponent(),
                                                  withIntermediateDirectories: true)
         try Self.verifyAmountConvention(at: storeURL)
-        let schema = Schema(versionedSchema: LedgerSchemaV3.self)
+        let schema = LedgerSchema.schema
         let configuration = ModelConfiguration("FinTrack", schema: schema,
             url: storeURL, cloudKitDatabase: .none)
-        let openedContainer = try ModelContainer(for: schema, migrationPlan: LedgerMigrationPlan.self,
+        let openedContainer = try ModelContainer(for: schema,
                                                  configurations: [configuration])
         let openedContext = ModelContext(openedContainer)
         openedContext.autosaveEnabled = false
@@ -42,8 +42,8 @@ public final class LocalTransactionRepository: TransactionRepository {
         let marker = storeURL.appendingPathExtension("amount-sign")
         if FileManager.default.fileExists(atPath: marker.path) {
             let convention = try String(contentsOf: marker, encoding: .utf8)
-            guard convention == Money.amountSignConvention else {
-                throw PersistenceError.unsupportedAmountConvention
+            guard convention == FinancialFormat.storeMarker else {
+                throw PersistenceError.unsupportedFormat
             }
             guard FileManager.default.fileExists(atPath: storeURL.path) else {
                 throw ExchangeError.invalid("The existing database file is missing. Its marker and recovery files were preserved. Restore a backup or explicitly create a separate empty ledger.")
@@ -62,9 +62,9 @@ public final class LocalTransactionRepository: TransactionRepository {
         }
         guard !storePaths.contains(where: { FileManager.default.fileExists(atPath: $0) }),
               !hasDrafts else {
-            throw PersistenceError.amountConventionMigrationRequired
+            throw PersistenceError.unsupportedFormat
         }
-        try Data(Money.amountSignConvention.utf8).write(to: marker, options: .atomic)
+        try Data(FinancialFormat.storeMarker.utf8).write(to: marker, options: .atomic)
     }
 
     public static func applicationSupportDirectory() throws -> URL {
@@ -113,6 +113,11 @@ public final class LocalTransactionRepository: TransactionRepository {
     public func update(id: UUID, expectedRevision: Int64, draft: TransactionDraft) throws -> LedgerTransaction {
         guard let stored = try row(id: id) else { throw LedgerError.recordNotFound }
         let current = try stored.value()
+        guard draft.sourceVersions == current.draft.sourceVersions && draft.historicalDecisions == current.draft.historicalDecisions
+            && draft.archivalFields == current.draft.archivalFields && draft.reportedVisibility == current.draft.reportedVisibility
+            && draft.reportedExceptional == current.draft.reportedExceptional else {
+            throw ExchangeError.invalid("Historical source evidence is read-only. Reconcile new provider facts through intake.")
+        }
         let updated = try current.revising(with: draft, expectedRevision: expectedRevision)
         try updated.validateReviewState(catalog: catalog)
         try RefundAccounting.validate(records: fetchAll().map { $0.id == id ? updated : $0 })
@@ -218,11 +223,11 @@ public final class LocalTransactionRepository: TransactionRepository {
     }
 
     public func workspace() throws -> ReviewWorkspace {
-        let rows = try context.fetch(FetchDescriptor<LedgerSchemaV3.StoredWorkspace>())
+        let rows = try context.fetch(FetchDescriptor<LedgerSchema.StoredWorkspace>())
         guard rows.count <= 1 else { throw PersistenceError.invalidStoredValue }
         if let row = rows.first {
             guard row.key == "workspace" else { throw PersistenceError.invalidStoredValue }
-            return try JSONDecoder().decode(ReviewWorkspace.self, from: row.payload)
+            return try StrictJSON.decode(ReviewWorkspace.self, from: row.payload)
         }
         return ReviewWorkspace()
     }
@@ -230,8 +235,8 @@ public final class LocalTransactionRepository: TransactionRepository {
     public func capacityUsage() throws -> (records: Int, bytes: Int) {
         let rows = try context.fetch(FetchDescriptor<Row>())
         var bytes = 1_048_576
-        for row in rows { bytes += (try row.payload?.count ?? JSONEncoder().encode(row.value()).count) + 512 }
-        for row in try context.fetch(FetchDescriptor<LedgerSchemaV3.StoredWorkspace>()) { bytes += row.payload.count }
+        for row in rows { bytes += row.payload.count + 512 }
+        for row in try context.fetch(FetchDescriptor<LedgerSchema.StoredWorkspace>()) { bytes += row.payload.count }
         return (rows.count, bytes)
     }
 
@@ -253,9 +258,6 @@ public final class LocalTransactionRepository: TransactionRepository {
         }
         var updated = original
         let replacements = Dictionary(uniqueKeysWithValues: updates.map { ($0.id, $0) })
-        for record in records where closed.contains(record.id) && original.resolvedDiscussions?[record.id.uuidString] != nil {
-            updated.closeDiscussion(for: replacements[record.id] ?? record)
-        }
         try updated.compactCompletedExchanges(records: records.map { replacements[$0.id] ?? $0 }, at: at)
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
         guard try encoder.encode(original) != encoder.encode(updated) || !updates.isEmpty else { return false }
@@ -268,29 +270,43 @@ public final class LocalTransactionRepository: TransactionRepository {
 
     private func writeWorkspace(_ value: ReviewWorkspace) throws {
         var value = value
+        try FinancialAccounting.validate(records: fetchAll(), workspace: value, catalog: catalog)
         try value.compactCompletedExchanges(records: fetchAll())
         let rows = try context.fetch(FetchDescriptor<Row>())
         var recordBytes = 0
         for row in rows {
-            let bytes = try row.payload?.count ?? JSONEncoder().encode(row.value()).count
+            let bytes = row.payload.count
             guard bytes <= BackupCapacity.maximumEntryBytes else { throw ExchangeError.invalid("A record exceeds the supported backup-entry size. Your previous saved data was preserved.") }
             recordBytes += bytes + 512
         }
         try BackupCapacity.validate(recordCount: rows.count, recordBytes: recordBytes, workspace: value)
         value.generation = UUID()
         let encoded = try JSONEncoder().encode(value)
-        if let row = try context.fetch(FetchDescriptor<LedgerSchemaV3.StoredWorkspace>()).first {
+        if let row = try context.fetch(FetchDescriptor<LedgerSchema.StoredWorkspace>()).first {
             row.payload = encoded
-        } else { context.insert(try LedgerSchemaV3.StoredWorkspace(value)) }
+        } else { context.insert(try LedgerSchema.StoredWorkspace(value)) }
     }
 
-    public func migrateDrafts(_ drafts: [String: Data]) throws {
+    /// All financial settings commit with the same validation/rollback as records.
+    public func saveFinancialSettings(_ value: FinancialContext, categories: [ReviewCategory]) throws {
         var workspace = try self.workspace()
-        guard !workspace.legacyDraftsMigrated else { return }
-        workspace.drafts.merge(drafts, uniquingKeysWith: { existing, _ in existing })
-        workspace.legacyDraftsMigrated = true
-        workspace.establishBaseline(records: try fetchAll())
-        try committing { try writeWorkspace(workspace) }
+        let nextCatalog = try ReviewCatalog(categories: categories)
+        guard value.sourceBaselines == workspace.sourceBaselines else { throw ExchangeError.invalid("Original source baselines are read-only evidence; current report settings do not rewrite them.") }
+        workspace.importedCategories = categories; workspace.accounts = value.accounts; workspace.programs = value.programs
+        workspace.claims = value.claims; workspace.repayments = value.repayments; workspace.relationships = value.relationships
+        workspace.reporting = value.reporting; workspace.sourceBaselines = value.sourceBaselines
+        let records = try fetchAll()
+        try FinancialAccounting.validate(records: records, workspace: workspace, catalog: nextCatalog)
+        let oldCatalog = catalog; catalog = nextCatalog
+        workspace.pending.append(FeedbackEvent(kind: "financial-settings", detail: "User updated the financial catalog, reporting or reimbursement settings. See financialContext."))
+        do { try committing { try writeWorkspace(workspace) } } catch { catalog = oldCatalog; throw error }
+    }
+
+    public func acceptRefundImport(_ value: RefundImport) throws {
+        let before = try backup()
+        let result = try value.applying(to: before)
+        guard result.workspace.refundImports.count != before.workspace.refundImports.count else { return }
+        try restore(result)
     }
 
     public func saveDraft(id: UUID, data: Data?) throws {
@@ -361,7 +377,7 @@ public final class LocalTransactionRepository: TransactionRepository {
         var updated: LedgerTransaction?
         var prior: LedgerTransaction?
         if let proposal = response.proposals.first(where: { $0.id == proposalID }) {
-            guard proposal.categoryID != nil || proposal.tags != nil else {
+            guard proposal.categoryID != nil || proposal.tags != nil || proposal.allocations != nil || proposal.primarySubcategoryID != nil else {
                 throw ExchangeError.invalid("Discussion answers have no accept or reject action. Read or reply in Discussions.")
             }
             prior = try row(id: proposal.recordID)?.value()
@@ -504,6 +520,13 @@ public final class LocalTransactionRepository: TransactionRepository {
             draft.date = facts.date; draft.activityDate = facts.activityDate; draft.payee = facts.payee
             draft.amount = facts.amount; draft.postingStatus = facts.postingStatus; draft.treatment = facts.treatment
             draft.source = facts.source
+            if let next = facts.sourceVersions.first {
+                for index in draft.sourceVersions.indices where draft.sourceVersions[index].successorID == nil {
+                    draft.sourceVersions[index].successorID = next.id
+                }
+                draft.sourceVersions.append(next)
+            }
+            draft.sourceReportDate = facts.sourceReportDate
             saved = try old.revising(with: draft, expectedRevision: expectedRevision)
         } else {
             // Unlinked manual/history rows can be the same purchase. Require explicit
@@ -601,7 +624,6 @@ public final class LocalTransactionRepository: TransactionRepository {
                 } else { context.insert(try Row(record)) }
             }
             var workspace = backup.workspace
-            workspace.legacyDraftsMigrated = true
             try writeWorkspace(workspace)
         }
         } catch { catalog = previousCatalog; throw error }

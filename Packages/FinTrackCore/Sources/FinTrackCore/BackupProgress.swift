@@ -4,8 +4,8 @@ public struct BackupVersion: Codable, Equatable, Sendable {
     public let id: UUID
     public let generation: UUID
     public let createdAt: Date
-    public let archiveVersion: Int?
-    public var fileName: String { "FinTrack-\(id.uuidString)." + (archiveVersion == 2 ? "fintrack" : "json") }
+    public let archiveVersion: Int
+    public var fileName: String { "FinTrack-\(id.uuidString).fintrack" }
     public init(generation: UUID, at: Date = .now) { id = UUID(); self.generation = generation; createdAt = at; archiveVersion = 2 }
 }
 

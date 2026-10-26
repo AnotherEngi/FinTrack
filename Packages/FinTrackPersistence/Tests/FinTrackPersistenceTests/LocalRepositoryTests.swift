@@ -36,7 +36,7 @@ import FinTrackCore
     let url = directory.appendingPathComponent("test.store")
     let original = Data("Unmarked earlier store: never open or rewrite automatically".utf8)
     try original.write(to: url)
-    #expect(throws: PersistenceError.amountConventionMigrationRequired) {
+    #expect(throws: PersistenceError.unsupportedFormat) {
         try LocalTransactionRepository(storeURL: url)
     }
     #expect(try Data(contentsOf: url) == original)
@@ -51,7 +51,7 @@ import FinTrackCore
     let url = directory.appendingPathComponent("test.store")
     let marker = url.appendingPathExtension("amount-sign")
     try Data("unknown-convention".utf8).write(to: marker)
-    #expect(throws: PersistenceError.unsupportedAmountConvention) {
+    #expect(throws: PersistenceError.unsupportedFormat) {
         try LocalTransactionRepository(storeURL: url)
     }
     #expect(try String(contentsOf: marker, encoding: .utf8) == "unknown-convention")
@@ -62,7 +62,7 @@ import FinTrackCore
     let original = Data("Unfinished earlier amount: -12.".utf8)
     let draftURL = drafts.appendingPathComponent("earlier.json")
     try original.write(to: draftURL)
-    #expect(throws: PersistenceError.amountConventionMigrationRequired) {
+    #expect(throws: PersistenceError.unsupportedFormat) {
         try LocalTransactionRepository(storeURL: url)
     }
     #expect(try Data(contentsOf: draftURL) == original)
@@ -126,7 +126,7 @@ private enum SimulatedFailure: Error { case diskWrite }
     let rows = try reopened.fetchAll()
     let saved = try #require(rows.first)
     #expect(saved == discussed)
-    #expect(saved.approval == .confirmed)
+    #expect(saved.approval == .unreviewed)
     #expect(saved.discussionRequested)
     #expect(saved.reviewHistory.count == 2)
     #expect(saved.draft.notes == "My own note")
@@ -159,49 +159,6 @@ private enum SimulatedFailure: Error { case diskWrite }
 }
 
 @MainActor
-@Test func v1MigrationPreservesRecordsAndNeverGuessesTreatmentOrApproval() throws {
-    let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-    defer { try? FileManager.default.removeItem(at: directory) }
-    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-    let url = directory.appendingPathComponent("test.store")
-    let original = try SyntheticTransactions.make()[0]
-    try autoreleasepool {
-        let schema = Schema(versionedSchema: LedgerSchemaV1.self)
-        let configuration = ModelConfiguration("FinTrack", schema: schema, url: url, cloudKitDatabase: .none)
-        let container = try ModelContainer(for: schema, configurations: [configuration])
-        let context = ModelContext(container)
-        context.autosaveEnabled = false
-        context.insert(LedgerSchemaV1.StoredTransaction(original, reviewStatusCode: "reviewed"))
-        try context.save()
-    }
-    // Represents the already-agreed positive-outflow prototype, not an unmarked store.
-    try Data(Money.amountSignConvention.utf8).write(to: url.appendingPathExtension("amount-sign"))
-    let repository = try LocalTransactionRepository(storeURL: url)
-    let migratedRows = try repository.fetchAll()
-    let migrated = try #require(migratedRows.first)
-    #expect(migrated.id == original.id)
-    #expect(migrated.revision == original.revision)
-    #expect(migrated.draft.amount == original.draft.amount)
-    #expect(migrated.draft.notes == original.draft.notes)
-    #expect(migrated.draft.legacyReviewStatus == .reviewed)
-    #expect(migrated.draft.treatment == .unresolved)
-    #expect(migrated.draft.postingStatus == .unresolved)
-    #expect(migrated.approval == .unreviewed)
-    #expect(migrated.assistantContext == AssistantContext())
-    var draft = migrated.draft
-    draft.treatment = .spending
-    draft.postingStatus = .posted
-    draft.categoryID = "sample-groceries"
-    let classified = try repository.update(id: migrated.id, expectedRevision: migrated.revision, draft: draft)
-    let approved = try repository.perform(ReviewRequest(transactionID: classified.id,
-        expectedRevision: classified.revision, action: .approve))
-    #expect(approved.approval == .confirmed)
-    #expect(approved.draft.legacyReviewStatus == .reviewed)
-    let reopened = try LocalTransactionRepository(storeURL: url)
-    #expect(try reopened.fetchAll().first == approved)
-}
-
-@MainActor
 @Test func sourceProvenanceAndUserTrackedDiscussionSurviveStoreReopen() throws {
     let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: directory) }
@@ -216,44 +173,6 @@ private enum SimulatedFailure: Error { case diskWrite }
     #expect(progressed.discussionProgress == .reviewingInChatGPT)
     #expect(progressed.draft.source == original.draft.source)
     #expect(progressed.classificationProvenance == original.classificationProvenance)
-}
-
-@MainActor
-@Test func oldV2PayloadOpensWithUnknownOriginsWithoutRewritingRecords() throws {
-    let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-    defer { try? FileManager.default.removeItem(at: directory) }
-    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-    let url = directory.appendingPathComponent("test.store")
-    let original = try SyntheticTableExamples.make(asOf: TransactionDate("2026-10-24"))[2]
-    var old = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(original)) as? [String: Any])
-    old.removeValue(forKey: "classificationProvenance")
-    old.removeValue(forKey: "discussionProgress")
-    var oldDraft = try #require(old["draft"] as? [String: Any])
-    oldDraft.removeValue(forKey: "source")
-    old["draft"] = oldDraft
-    let payload = try JSONSerialization.data(withJSONObject: old)
-    try autoreleasepool {
-        let schema = Schema(versionedSchema: LedgerSchemaV2.self)
-        let config = ModelConfiguration("FinTrack", schema: schema, url: url, cloudKitDatabase: .none)
-        let container = try ModelContainer(for: schema, configurations: [config])
-        let context = ModelContext(container)
-        context.autosaveEnabled = false
-        let row = try LedgerSchemaV2.StoredTransaction(original)
-        row.payload = payload
-        context.insert(row)
-        try context.save()
-    }
-    try Data(Money.amountSignConvention.utf8).write(to: url.appendingPathExtension("amount-sign"))
-    let repository = try LocalTransactionRepository(storeURL: url)
-    let restored = try #require(repository.fetchAll().first)
-    #expect(restored.id == original.id)
-    #expect(restored.revision == original.revision)
-    #expect(restored.draft.amount == original.draft.amount)
-    #expect(restored.draft.notes == original.draft.notes)
-    #expect(restored.draft.source == nil)
-    #expect(restored.classificationProvenance == .init())
-    #expect(restored.discussionProgress == .awaitingExport)
-    #expect(restored.reviewHistory == original.reviewHistory)
 }
 
 @MainActor

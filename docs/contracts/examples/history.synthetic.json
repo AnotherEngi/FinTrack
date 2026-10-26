@@ -1,0 +1,675 @@
+{
+  "accounts" : [
+    {
+      "alias" : "Fictional Card",
+      "id" : "10000000-0000-4000-8000-000000000001",
+      "provider" : {
+        "kind" : "unknown"
+      },
+      "providerAccountID" : {
+        "kind" : "unknown"
+      }
+    }
+  ],
+  "amountSignConvention" : "outflow-positive-v1",
+  "audit" : {
+    "blockers" : [
+
+    ],
+    "columns" : [
+      {
+        "essential" : true,
+        "explanation" : "Exact cents",
+        "handling" : "mapped",
+        "name" : "Ledger!Amount",
+        "tabs" : [
+
+        ],
+        "target" : "amount"
+      },
+      {
+        "essential" : true,
+        "explanation" : "Null is distinct from empty",
+        "handling" : "preserved",
+        "name" : "Ledger!Other",
+        "tabs" : [
+
+        ],
+        "target" : "archival"
+      }
+    ],
+    "controls" : [
+      {
+        "basis" : "all-source-rows-active-gross-posted",
+        "count" : 4,
+        "creditMinorUnits" : "4000",
+        "currency" : "USD",
+        "debitMinorUnits" : "19000",
+        "group" : "all",
+        "netMinorUnits" : "15000",
+        "spendingMinorUnits" : "10000"
+      },
+      {
+        "basis" : "all-source-rows-active-gross-posted",
+        "count" : 2,
+        "creditMinorUnits" : "3000",
+        "currency" : "USD",
+        "debitMinorUnits" : "10000",
+        "group" : "partition:active",
+        "netMinorUnits" : "7000",
+        "spendingMinorUnits" : "10000"
+      },
+      {
+        "basis" : "all-source-rows-active-gross-posted",
+        "count" : 1,
+        "creditMinorUnits" : "1000",
+        "currency" : "USD",
+        "debitMinorUnits" : "0",
+        "group" : "partition:deferredRefund",
+        "netMinorUnits" : "-1000",
+        "spendingMinorUnits" : "0"
+      },
+      {
+        "basis" : "all-source-rows-active-gross-posted",
+        "count" : 1,
+        "creditMinorUnits" : "0",
+        "currency" : "USD",
+        "debitMinorUnits" : "9000",
+        "group" : "partition:historical",
+        "netMinorUnits" : "9000",
+        "spendingMinorUnits" : "0"
+      },
+      {
+        "basis" : "all-source-rows-active-gross-posted",
+        "count" : 4,
+        "creditMinorUnits" : "4000",
+        "currency" : "USD",
+        "debitMinorUnits" : "19000",
+        "group" : "source:Fictional Card",
+        "netMinorUnits" : "15000",
+        "spendingMinorUnits" : "10000"
+      },
+      {
+        "basis" : "all-source-rows-active-gross-posted",
+        "count" : 4,
+        "creditMinorUnits" : "4000",
+        "currency" : "USD",
+        "debitMinorUnits" : "19000",
+        "group" : "tab:Ledger",
+        "netMinorUnits" : "15000",
+        "spendingMinorUnits" : "10000"
+      },
+      {
+        "basis" : "all-source-rows-active-gross-posted",
+        "count" : 1,
+        "creditMinorUnits" : "1000",
+        "currency" : "USD",
+        "debitMinorUnits" : "0",
+        "group" : "treatment:refund",
+        "netMinorUnits" : "-1000",
+        "spendingMinorUnits" : "0"
+      },
+      {
+        "basis" : "all-source-rows-active-gross-posted",
+        "count" : 1,
+        "creditMinorUnits" : "3000",
+        "currency" : "USD",
+        "debitMinorUnits" : "0",
+        "group" : "treatment:reimbursementReceipt",
+        "netMinorUnits" : "-3000",
+        "spendingMinorUnits" : "0"
+      },
+      {
+        "basis" : "all-source-rows-active-gross-posted",
+        "count" : 2,
+        "creditMinorUnits" : "0",
+        "currency" : "USD",
+        "debitMinorUnits" : "19000",
+        "group" : "treatment:spending",
+        "netMinorUnits" : "19000",
+        "spendingMinorUnits" : "10000"
+      }
+    ],
+    "rows" : [
+      {
+        "amount" : {
+          "currency" : "USD",
+          "minorUnits" : "9000"
+        },
+        "disposition" : "historical",
+        "kind" : "financial",
+        "locator" : "Ledger!2",
+        "reason" : "",
+        "recordID" : "60000000-0000-4000-8000-000000000006",
+        "source" : "Fictional Card",
+        "tab" : "Ledger",
+        "treatment" : "spending",
+        "versionID" : "20000000-0000-4000-8000-000000000002"
+      },
+      {
+        "amount" : {
+          "currency" : "USD",
+          "minorUnits" : "10000"
+        },
+        "disposition" : "active",
+        "kind" : "financial",
+        "locator" : "Ledger!3",
+        "reason" : "",
+        "recordID" : "60000000-0000-4000-8000-000000000006",
+        "source" : "Fictional Card",
+        "tab" : "Ledger",
+        "treatment" : "spending",
+        "versionID" : "30000000-0000-4000-8000-000000000003"
+      },
+      {
+        "amount" : {
+          "currency" : "USD",
+          "minorUnits" : "-3000"
+        },
+        "disposition" : "active",
+        "kind" : "financial",
+        "locator" : "Ledger!4",
+        "reason" : "",
+        "recordID" : "70000000-0000-4000-8000-000000000007",
+        "source" : "Fictional Card",
+        "tab" : "Ledger",
+        "treatment" : "reimbursementReceipt"
+      },
+      {
+        "amount" : {
+          "currency" : "USD",
+          "minorUnits" : "-1000"
+        },
+        "disposition" : "deferredRefund",
+        "kind" : "financial",
+        "locator" : "Ledger!5",
+        "reason" : "",
+        "recordID" : "50000000-0000-4000-8000-000000000005",
+        "source" : "Fictional Card",
+        "tab" : "Ledger",
+        "treatment" : "refund"
+      }
+    ],
+    "sourceRowCount" : 4,
+    "warnings" : [
+
+    ]
+  },
+  "categories" : [
+    {
+      "definition" : {
+        "kind" : "text",
+        "text" : "Meals and groceries"
+      },
+      "excluded" : false,
+      "id" : "food",
+      "label" : "Food",
+      "origin" : "user",
+      "storedLabel" : "Food source",
+      "subcategories" : [
+        {
+          "definition" : {
+            "kind" : "text",
+            "text" : "Shelf stable food"
+          },
+          "excluded" : false,
+          "id" : "pantry",
+          "label" : "Pantry",
+          "origin" : "user",
+          "storedLabel" : "Pantry",
+          "unresolved" : false
+        }
+      ],
+      "unresolved" : false
+    },
+    {
+      "definition" : {
+        "kind" : "unknown"
+      },
+      "excluded" : false,
+      "id" : "supplies",
+      "label" : "Supplies",
+      "origin" : "unknown",
+      "storedLabel" : "Supplies",
+      "subcategories" : [
+
+      ],
+      "unresolved" : false
+    },
+    {
+      "definition" : {
+        "kind" : "text",
+        "text" : "Retain me"
+      },
+      "excluded" : false,
+      "id" : "unused",
+      "label" : "Unused definition",
+      "origin" : "unknown",
+      "storedLabel" : "Unused definition",
+      "subcategories" : [
+
+      ],
+      "unresolved" : false
+    }
+  ],
+  "claims" : [
+    {
+      "eligibility" : "unknown",
+      "expected" : {
+        "currency" : "USD",
+        "minorUnits" : "3000"
+      },
+      "expenseID" : "60000000-0000-4000-8000-000000000006",
+      "id" : "58A08822-15D4-4281-95DD-EBFD70851E1C",
+      "notes" : "",
+      "programID" : "FD379D20-FC4B-4FFF-A142-EC8AC01FDEF3",
+      "status" : "partial"
+    }
+  ],
+  "id" : "80000000-0000-4000-8000-000000000008",
+  "knowledge" : [
+
+  ],
+  "programs" : [
+    {
+      "currency" : "USD",
+      "defaults" : {
+
+      },
+      "eligibilityRules" : {
+        "kind" : "unknown"
+      },
+      "id" : "FD379D20-FC4B-4FFF-A142-EC8AC01FDEF3",
+      "label" : "Fictional benefit",
+      "origin" : "unknown",
+      "period" : {
+        "basis" : "unknown"
+      }
+    }
+  ],
+  "purpose" : "fintrack-history-import",
+  "records" : [
+    {
+      "approval" : "unreviewed",
+      "assistantContext" : {
+        "ledgerNotes" : "",
+        "question" : "Food or supplies?",
+        "reason" : ""
+      },
+      "classificationProvenance" : {
+        "category" : "assistant",
+        "tags" : {
+          "Travel" : "unknown"
+        }
+      },
+      "createdAt" : 814667368.1009178,
+      "discussionRequested" : false,
+      "draft" : {
+        "activityDate" : "2026-03-01",
+        "allocations" : [
+          {
+            "amount" : {
+              "currency" : "USD",
+              "minorUnits" : "6000"
+            },
+            "categoryID" : "food",
+            "id" : "00000000-0000-4000-8000-000000000001",
+            "origin" : "user",
+            "subcategoryID" : "pantry"
+          },
+          {
+            "amount" : {
+              "currency" : "USD",
+              "minorUnits" : "4000"
+            },
+            "categoryID" : "supplies",
+            "id" : "40000000-0000-4000-8000-000000000004",
+            "origin" : "assistant"
+          }
+        ],
+        "amount" : {
+          "currency" : "USD",
+          "minorUnits" : "10000"
+        },
+        "answer" : "",
+        "archivalFields" : {
+          "Ledger!Empty" : {
+            "ownership" : "unknown",
+            "value" : {
+              "kind" : "text",
+              "text" : ""
+            }
+          },
+          "Ledger!Other" : {
+            "ownership" : "unknown",
+            "value" : {
+              "kind" : "null"
+            }
+          }
+        },
+        "categoryID" : "food",
+        "date" : "2026-03-02",
+        "historicalDecisions" : [
+          {
+            "approved" : true,
+            "evidence" : "Source explicitly approved; decision timestamp not supplied",
+            "id" : "96D4C496-644A-4EB5-BE52-86D276116DD1",
+            "origin" : "unknown"
+          }
+        ],
+        "notes" : "User durable note",
+        "payee" : "Fictional shop",
+        "postingStatus" : "posted",
+        "primarySubcategoryID" : "pantry",
+        "questionState" : "open",
+        "reportedExceptional" : {
+          "kind" : "unknown"
+        },
+        "reportedVisibility" : {
+          "kind" : "unknown"
+        },
+        "source" : {
+          "id" : "10000000-0000-4000-8000-000000000001",
+          "label" : "Fictional Card"
+        },
+        "sourceNotes" : [
+          {
+            "id" : "8FA8DE31-871D-4CFC-A084-9CDAF5CFE7E8",
+            "ownership" : "mixed",
+            "text" : "Uncertain ownership; retain"
+          },
+          {
+            "id" : "1AA27703-D877-463F-A9A2-97253676BCAD",
+            "ownership" : "assistantReason",
+            "text" : "Temporary rationale"
+          }
+        ],
+        "sourceVersions" : [
+          {
+            "allocations" : [
+
+            ],
+            "amount" : {
+              "currency" : "USD",
+              "minorUnits" : "9000"
+            },
+            "date" : "2026-02-28",
+            "decisions" : [
+              {
+                "approved" : true,
+                "evidence" : "Source explicitly approved; decision timestamp not supplied",
+                "id" : "96D4C496-644A-4EB5-BE52-86D276116DD1",
+                "origin" : "unknown"
+              }
+            ],
+            "id" : "20000000-0000-4000-8000-000000000002",
+            "identity" : {
+              "sourceAlias" : "Fictional Card",
+              "transactionID" : "pending-synthetic"
+            },
+            "merchant" : "Fictional pending shop",
+            "notes" : [
+              {
+                "id" : "EF4811AE-9B93-445B-B3F4-4999A066D8F3",
+                "ownership" : "ledgerFact",
+                "text" : "Original pending amount"
+              }
+            ],
+            "observedStatus" : "pending",
+            "successorID" : "30000000-0000-4000-8000-000000000003",
+            "tags" : [
+
+            ],
+            "treatment" : "unresolved"
+          },
+          {
+            "activityDate" : "2026-03-01",
+            "allocations" : [
+
+            ],
+            "amount" : {
+              "currency" : "USD",
+              "minorUnits" : "10000"
+            },
+            "date" : "2026-03-02",
+            "decisions" : [
+
+            ],
+            "id" : "30000000-0000-4000-8000-000000000003",
+            "identity" : {
+              "sourceAlias" : "Fictional Card",
+              "transactionID" : "posted-synthetic"
+            },
+            "merchant" : "Fictional shop",
+            "notes" : [
+
+            ],
+            "observedStatus" : "posted",
+            "tags" : [
+
+            ],
+            "timestamp" : {
+              "original" : "2026-03-01T23:45:00-05:00",
+              "precision" : "second",
+              "timeZone" : "America/New_York"
+            },
+            "treatment" : "unresolved"
+          }
+        ],
+        "tags" : [
+          "Travel"
+        ],
+        "treatment" : "spending"
+      },
+      "id" : "60000000-0000-4000-8000-000000000006",
+      "reviewHistory" : [
+
+      ],
+      "revision" : "1",
+      "updatedAt" : 814667368.1009178
+    },
+    {
+      "approval" : "notApplicable",
+      "assistantContext" : {
+        "ledgerNotes" : "",
+        "question" : "",
+        "reason" : ""
+      },
+      "classificationProvenance" : {
+        "category" : "unknown",
+        "tags" : {
+
+        }
+      },
+      "createdAt" : 814667368.1009922,
+      "discussionRequested" : false,
+      "draft" : {
+        "allocations" : [
+
+        ],
+        "amount" : {
+          "currency" : "USD",
+          "minorUnits" : "-3000"
+        },
+        "answer" : "",
+        "archivalFields" : {
+          "Ledger!Other" : {
+            "ownership" : "unknown",
+            "value" : {
+              "kind" : "absent"
+            }
+          }
+        },
+        "date" : "2026-04-01",
+        "historicalDecisions" : [
+
+        ],
+        "notes" : "",
+        "payee" : "Fictional repayment",
+        "postingStatus" : "posted",
+        "questionState" : "none",
+        "reportedExceptional" : {
+          "kind" : "unknown"
+        },
+        "reportedVisibility" : {
+          "kind" : "unknown"
+        },
+        "sourceNotes" : [
+
+        ],
+        "sourceVersions" : [
+
+        ],
+        "tags" : [
+
+        ],
+        "treatment" : "reimbursementReceipt"
+      },
+      "id" : "70000000-0000-4000-8000-000000000007",
+      "reviewHistory" : [
+
+      ],
+      "revision" : "1",
+      "updatedAt" : 814667368.1009922
+    }
+  ],
+  "relationships" : [
+
+  ],
+  "repayments" : [
+    {
+      "amount" : {
+        "currency" : "USD",
+        "minorUnits" : "2000"
+      },
+      "claimID" : "58A08822-15D4-4281-95DD-EBFD70851E1C",
+      "expenseAllocationID" : "00000000-0000-4000-8000-000000000001",
+      "id" : "AF78931D-5081-4B80-842A-03F2D795C86E",
+      "receiptID" : "70000000-0000-4000-8000-000000000007"
+    }
+  ],
+  "reporting" : {
+    "asOf" : "2026-06-12",
+    "coverage" : [
+      {
+        "from" : "2026-02-01",
+        "limitations" : "Synthetic coverage only",
+        "source" : "Fictional Card",
+        "status" : "partial",
+        "through" : "2026-06-12"
+      }
+    ],
+    "firstWeekday" : 2,
+    "includePostedUnreviewed" : true,
+    "sourceRules" : {
+
+    },
+    "timeZone" : "America/New_York"
+  },
+  "schemaVersion" : 2,
+  "sourceBaselines" : [
+    {
+      "basis" : {
+        "refunds" : {
+          "kind" : "text",
+          "text" : "Deferred"
+        }
+      },
+      "controls" : [
+        {
+          "basis" : "all-source-rows-active-gross-posted",
+          "count" : 4,
+          "creditMinorUnits" : "4000",
+          "currency" : "USD",
+          "debitMinorUnits" : "19000",
+          "group" : "all",
+          "netMinorUnits" : "15000",
+          "spendingMinorUnits" : "10000"
+        },
+        {
+          "basis" : "all-source-rows-active-gross-posted",
+          "count" : 2,
+          "creditMinorUnits" : "3000",
+          "currency" : "USD",
+          "debitMinorUnits" : "10000",
+          "group" : "partition:active",
+          "netMinorUnits" : "7000",
+          "spendingMinorUnits" : "10000"
+        },
+        {
+          "basis" : "all-source-rows-active-gross-posted",
+          "count" : 1,
+          "creditMinorUnits" : "1000",
+          "currency" : "USD",
+          "debitMinorUnits" : "0",
+          "group" : "partition:deferredRefund",
+          "netMinorUnits" : "-1000",
+          "spendingMinorUnits" : "0"
+        },
+        {
+          "basis" : "all-source-rows-active-gross-posted",
+          "count" : 1,
+          "creditMinorUnits" : "0",
+          "currency" : "USD",
+          "debitMinorUnits" : "9000",
+          "group" : "partition:historical",
+          "netMinorUnits" : "9000",
+          "spendingMinorUnits" : "0"
+        },
+        {
+          "basis" : "all-source-rows-active-gross-posted",
+          "count" : 4,
+          "creditMinorUnits" : "4000",
+          "currency" : "USD",
+          "debitMinorUnits" : "19000",
+          "group" : "source:Fictional Card",
+          "netMinorUnits" : "15000",
+          "spendingMinorUnits" : "10000"
+        },
+        {
+          "basis" : "all-source-rows-active-gross-posted",
+          "count" : 4,
+          "creditMinorUnits" : "4000",
+          "currency" : "USD",
+          "debitMinorUnits" : "19000",
+          "group" : "tab:Ledger",
+          "netMinorUnits" : "15000",
+          "spendingMinorUnits" : "10000"
+        },
+        {
+          "basis" : "all-source-rows-active-gross-posted",
+          "count" : 1,
+          "creditMinorUnits" : "1000",
+          "currency" : "USD",
+          "debitMinorUnits" : "0",
+          "group" : "treatment:refund",
+          "netMinorUnits" : "-1000",
+          "spendingMinorUnits" : "0"
+        },
+        {
+          "basis" : "all-source-rows-active-gross-posted",
+          "count" : 1,
+          "creditMinorUnits" : "3000",
+          "currency" : "USD",
+          "debitMinorUnits" : "0",
+          "group" : "treatment:reimbursementReceipt",
+          "netMinorUnits" : "-3000",
+          "spendingMinorUnits" : "0"
+        },
+        {
+          "basis" : "all-source-rows-active-gross-posted",
+          "count" : 2,
+          "creditMinorUnits" : "0",
+          "currency" : "USD",
+          "debitMinorUnits" : "19000",
+          "group" : "treatment:spending",
+          "netMinorUnits" : "19000",
+          "spendingMinorUnits" : "10000"
+        }
+      ],
+      "id" : "2F866C10-1E77-4612-A9F3-0618E270E361",
+      "label" : "Original source gross basis"
+    }
+  ],
+  "sourceName" : "Fictional workbook"
+}

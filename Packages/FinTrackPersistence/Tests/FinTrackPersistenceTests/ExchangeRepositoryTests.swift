@@ -14,16 +14,16 @@ private enum ExchangeWriteFailure: Error { case disk }
     let record = try SyntheticTransactions.make()[0]
     try repository.insert(record)
     let packet = try repository.prepareReview(mode: .pending)
-    let explanation = ClassificationProposal(recordID: record.id, expectedRevision: String(record.revision),
-        rationale: "Fictional legacy explanation without an edit")
-    let response = ReviewResponse(packetID: packet.manifest.id, knowledgeVersion: packet.manifest.knowledgeVersion, proposals: [explanation])
+    let explanation = DiscussionAnswer(recordID: record.id, expectedRevision: String(record.revision),
+        text: "Fictional answer without an edit")
+    let response = ReviewResponse(packetID: packet.manifest.id, knowledgeVersion: packet.manifest.knowledgeVersion, answers: [explanation])
     try repository.stageIncoming(ExchangeJSON.encode(response))
     for accept in [true, false] {
         #expect(throws: (any Error).self) { try repository.decideProposal(fileID: response.id, proposalID: explanation.id, accept: accept) }
     }
     #expect(try repository.fetchAll().first == record)
     #expect(try repository.workspace().decidedProposals.isEmpty)
-    #expect(try repository.workspace().discussion(for: record)?.answers.first?.text == explanation.rationale)
+    #expect(try repository.workspace().discussion(for: record)?.answers.first?.text == explanation.text)
 }
 
 @MainActor
@@ -317,30 +317,6 @@ private enum ExchangeWriteFailure: Error { case disk }
     #expect(try repository.workspace().pending == backup.workspace.pending)
     #expect(try repository.workspace().drafts == backup.workspace.drafts)
     #expect(try repository.workspace().manifests.first?.id == backup.workspace.manifests.first?.id)
-}
-
-@MainActor
-@Test func schemaV2MigratesToWorkspaceWithoutChangingExistingRecords() throws {
-    let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-    defer { try? FileManager.default.removeItem(at: directory) }
-    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-    let url = directory.appendingPathComponent("test.store")
-    let record = try SyntheticTransactions.make()[0]
-    try autoreleasepool {
-        let schema = Schema(versionedSchema: LedgerSchemaV2.self)
-        let config = ModelConfiguration("FinTrack", schema: schema, url: url, cloudKitDatabase: .none)
-        let container = try ModelContainer(for: schema, configurations: [config])
-        let context = ModelContext(container)
-        context.insert(try LedgerSchemaV2.StoredTransaction(record))
-        try context.save()
-    }
-    try Data(Money.amountSignConvention.utf8).write(to: url.appendingPathExtension("amount-sign"))
-    let repository = try LocalTransactionRepository(storeURL: url)
-    #expect(try repository.fetchAll() == [record])
-    try repository.migrateDrafts([:])
-    let packet = try repository.prepareReview(mode: .pending)
-    #expect(packet.feedback.count == 1)
-    #expect(packet.snapshot?.transactions.first?.transactionID == record.id)
 }
 
 @MainActor

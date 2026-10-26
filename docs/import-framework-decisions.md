@@ -11,7 +11,7 @@ user's exceptions/clarifications and takes precedence where they differ.
    splits/subcategories/reimbursements is insufficient. Do not use the prototype
    v1 history format for the real migration. Publish the revised complete contract
    and capability/acceptance evidence first. The app's initial-history action is
-   blocked while this gate is unmet; the old decoder remains for synthetic tests.
+   blocked while this gate is unmet. The retired decoder has been removed.
 2. **Defer merchant refunds to a separate import.** The next ChatGPT request must
    separate refund rows from the proposed initial history, preserving them for a
    later dedicated contract. This is an explicit exception to the previous single
@@ -63,6 +63,13 @@ user's exceptions/clarifications and takes precedence where they differ.
     allocation balances with exact-cent rounding, to be specified in the contract.
 
 ## Next ChatGPT request
+
+Current implementation/contracts are now in
+[the financial framework specification](contracts/financial-framework.md).
+Use [the replacement migration request](chatgpt-history-migration.md) after the
+[Mac/iPad validation gate](framework-validation.md) passes. No old format should
+be generated for migration. The earlier audit-only request remains useful for
+source discovery, but is no longer the current JSON-generation specification.
 
 Use [the audit and refund-partition request](chatgpt-import-audit-request.md),
 not the old real-migration generation instructions. It requests an audit before

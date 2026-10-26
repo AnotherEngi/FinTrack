@@ -38,7 +38,7 @@ private func action(_ kind: ReviewAction, on record: LedgerTransaction,
     draft.answer = "Household supplies"
     let edited = try approved.revising(with: draft, expectedRevision: approved.revision)
     let discussed = try action(.discuss, on: edited)
-    #expect(discussed.approval == .confirmed)
+    #expect(discussed.approval == .unreviewed)
     #expect(discussed.discussionRequested)
     // Approval discards resolved assistant discussion, while keeping ledger history.
     #expect(discussed.assistantContext.question.isEmpty)
@@ -97,7 +97,7 @@ private func action(_ kind: ReviewAction, on record: LedgerTransaction,
         let record = try purchase(notes: "Does not authorize approval", treatment: treatment, amount: -500)
         #expect(record.approval == .notApplicable)
         #expect(throws: ReviewError.excludedTreatment) { try action(.approve, on: record) }
-        #expect(throws: ReviewError.excludedTreatment) { try action(.discuss, on: record) }
+        #expect(try action(.discuss, on: record).approval == .unreviewed)
         #expect(try action(.skip, on: record) == record)
     }
     let approved = try action(.approve, on: purchase(notes: "A comment"))
@@ -191,27 +191,6 @@ private func action(_ kind: ReviewAction, on record: LedgerTransaction,
     #expect(throws: ReviewError.invalidTags) { try LedgerTransaction(draft: draft) }
 }
 
-@Test func oldReviewFlagsArePreservedWithoutInferringClassificationOrApproval() throws {
-    let record = try purchase()
-    let data = try JSONEncoder().encode(record)
-    let decoded = try JSONSerialization.jsonObject(with: data)
-    var old = try #require(decoded as? [String: Any])
-    old.removeValue(forKey: "approval")
-    old.removeValue(forKey: "reviewHistory")
-    var draft = try #require(old["draft"] as? [String: Any])
-    for field in ["treatment", "postingStatus", "categoryID", "legacyReviewStatus"] { draft.removeValue(forKey: field) }
-    draft["reviewStatus"] = "reviewed"
-    old["draft"] = draft
-    let legacyData = try JSONSerialization.data(withJSONObject: old)
-    let restored = try JSONDecoder().decode(LedgerTransaction.self, from: legacyData)
-    #expect(restored.draft.legacyReviewStatus == .reviewed)
-    #expect(restored.draft.treatment == .unresolved)
-    #expect(restored.draft.postingStatus == .unresolved)
-    #expect(restored.approval == .unreviewed)
-    #expect(restored.draft.amount == record.draft.amount)
-    #expect(restored.id == record.id)
-}
-
 @Test func reviewHistoryAndCommentOwnershipSurviveSerialization() throws {
     let record = try action(.discuss, on: purchase(notes: "User-owned",
         assistant: .init(question: "Assistant-owned", reason: "Reason", ledgerNotes: "History")))
@@ -227,26 +206,6 @@ private func action(_ kind: ReviewAction, on record: LedgerTransaction,
     #expect(throws: ReviewError.invalidHistory) {
         try JSONDecoder().decode(LedgerTransaction.self, from: corruptData)
     }
-}
-
-@Test func oldIncompleteEditorInputRetainsTextAndNeverCreatesApproval() throws {
-    let old: [String: Any] = ["dateText": "2026-10-01", "payee": "My draft",
-        "amountText": "-12.", "notes": "My own note", "reviewStatus": "reviewed"]
-    let data = try JSONSerialization.data(withJSONObject: old)
-    let input = try JSONDecoder().decode(TransactionInput.self, from: data)
-    #expect(input.amountText == "-12.")
-    #expect(input.notes == "My own note")
-    #expect(input.legacyReviewStatus == .reviewed)
-    #expect(input.treatment == .unresolved)
-    #expect(input.postingStatus == .unresolved)
-    #expect(throws: MoneyError.invalidAmount) { try input.value() }
-    var completed = input
-    completed.amountText = "-12.00"
-    let record = try LedgerTransaction(draft: completed.value())
-    #expect(record.approval == .unreviewed)
-    #expect(record.reviewHistory.isEmpty)
-    let encoded = try JSONEncoder().encode(input)
-    #expect(try JSONDecoder().decode(TransactionInput.self, from: encoded) == input)
 }
 
 @Test func editorInputKeepsNotesAnswersAndClassificationSeparate() throws {

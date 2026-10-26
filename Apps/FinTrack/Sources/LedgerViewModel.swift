@@ -21,9 +21,19 @@ final class LedgerViewModel {
     var canExportBackup: Bool { repository != nil && startupFailure == nil }
     var message: String?
     // Real history migration is paused by the user's full-framework prerequisite.
-    // Keep the v1 decoder available for synthetic regression/compatibility work.
+    // One current format. Enable real migration only after the framework acceptance checks.
     var historyImportBlockReason: String? {
-        "History migration is paused until the full financial framework and revised import contract are implemented and validated. The current format is for synthetic development only."
+        "Real history and deferred-refund migration are paused until this financial-framework revision passes Mac package tests, an Xcode build and the physical-iPad backup/restore checks. Use synthetic development data only."
+    }
+
+    func saveFinancialSettings(_ value: FinancialContext, categories: [ReviewCategory]) throws {
+        guard let repository else { throw LedgerError.recordNotFound }
+        try repository.saveFinancialSettings(value, categories: categories); reload()
+    }
+    func importRefunds(_ value: RefundImport) throws {
+        if let reason = historyImportBlockReason { throw ExchangeError.invalid(reason) }
+        guard let repository else { throw LedgerError.recordNotFound }
+        try repository.acceptRefundImport(value); reload()
     }
 
     func saveSummaryVisibility(_ value: SummaryVisibility) {
@@ -134,6 +144,7 @@ final class LedgerViewModel {
         sessionChanges.register(before: before, after: saved)
         var committed = draft
         committed.expectedRevision = saved.revision
+        committed.input.rebase(on: saved.draft)
         do { try draftStore.remove(id: draft.id) }
         catch { message = "The transaction saved, but its draft could not be removed: \(error.localizedDescription)" }
         reload()
@@ -246,9 +257,14 @@ final class LedgerViewModel {
     private func validateRawDrafts(_ value: FullBackup) throws {
         try value.validate(catalog: .prototype)
         for (id, raw) in value.workspace.drafts {
-            let draft = try JSONDecoder().decode(EditorDraft.self, from: raw)
+            let draft = try StrictJSON.decode(EditorDraft.self, from: raw)
             guard draft.id.uuidString == id, draft.expectedRevision.map({ $0 > 0 }) ?? true else {
                 throw ExchangeError.invalid("A backup draft has an invalid ID/revision.")
+            }
+            if let revision = draft.expectedRevision {
+                guard let record = value.records.first(where: { $0.id == draft.id }), revision <= record.revision else {
+                    throw ExchangeError.invalid("A draft references a missing record or future revision. No restore was applied.")
+                }
             }
         }
     }
@@ -332,20 +348,6 @@ final class LedgerViewModel {
     }
 
     private func cleanupMigratedFiles() throws {
-        let directory = try LocalTransactionRepository.applicationSupportDirectory()
-        let activeURL = try StoreRecovery.activeURL(in: directory)
-        if workspace.legacyDraftsMigrated && activeURL == directory.appendingPathComponent("FinTrack.store") {
-            let legacy = directory.appendingPathComponent("Drafts", isDirectory: true)
-            if FileManager.default.fileExists(atPath: legacy.path) {
-                for file in try FileManager.default.contentsOfDirectory(at: legacy, includingPropertiesForKeys: [.isRegularFileKey]) {
-                    guard file.pathExtension == "json", let id = UUID(uuidString: file.deletingPathExtension().lastPathComponent),
-                          try file.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile == true else { continue }
-                    let draft = try JSONDecoder().decode(EditorDraft.self, from: Data(contentsOf: file))
-                    guard draft.id == id else { continue }
-                    try FileManager.default.removeItem(at: file)
-                }
-            }
-        }
         try Self.cleanupPreparedFiles()
         try Self.cleanupArchivePartials()
     }

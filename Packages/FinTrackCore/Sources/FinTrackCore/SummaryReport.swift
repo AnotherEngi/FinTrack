@@ -10,6 +10,7 @@ public struct SummaryVisibility: Codable, Equatable, Sendable {
     }
     public func hides(_ record: LedgerTransaction) -> Bool {
         recordIDs.contains(record.id) || categoryIDs.contains(record.draft.categoryID ?? "")
+            || record.draft.allocations.contains { categoryIDs.contains($0.categoryID) }
             || !tags.isDisjoint(with: record.draft.tags)
     }
     public func validate(recordIDs available: Set<UUID>) throws {
@@ -26,8 +27,9 @@ public struct SummaryVisibility: Codable, Equatable, Sendable {
 public struct RefundAllocation: Codable, Equatable, Sendable {
     public let purchaseID: UUID
     public let amount: Money
-    public init(purchaseID: UUID, amount: Money) { self.purchaseID = purchaseID; self.amount = amount }
-    private enum CodingKeys: String, CodingKey { case purchaseID, amountMinorUnits, currency }
+    public let allocationID: UUID?
+    public init(purchaseID: UUID, amount: Money, allocationID: UUID? = nil) { self.purchaseID = purchaseID; self.amount = amount; self.allocationID = allocationID }
+    private enum CodingKeys: String, CodingKey { case purchaseID, allocationID, amountMinorUnits, currency }
     public init(from decoder: any Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         let text = try values.decode(String.self, forKey: .amountMinorUnits)
@@ -35,11 +37,13 @@ public struct RefundAllocation: Codable, Equatable, Sendable {
             throw ExchangeError.invalid("Refund allocation amount must be an exact integer string.")
         }
         purchaseID = try values.decode(UUID.self, forKey: .purchaseID)
+        allocationID = try values.decodeIfPresent(UUID.self, forKey: .allocationID)
         amount = try Money(minorUnits: cents, currency: values.decode(Currency.self, forKey: .currency))
     }
     public func encode(to encoder: any Encoder) throws {
         var values = encoder.container(keyedBy: CodingKeys.self)
         try values.encode(purchaseID, forKey: .purchaseID)
+        try values.encodeIfPresent(allocationID, forKey: .allocationID)
         try values.encode(String(amount.minorUnits), forKey: .amountMinorUnits)
         try values.encode(amount.currency, forKey: .currency)
     }
@@ -50,6 +54,7 @@ public enum RefundAccounting {
         guard Set(records.map(\.id)).count == records.count else { throw LedgerError.duplicateID }
         let byID = Dictionary(uniqueKeysWithValues: records.map { ($0.id, $0) })
         var used: [UUID: Int64] = [:]
+        var components: [String: Int64] = [:]
         for refund in records {
             try refund.draft.validate()
             for allocation in refund.draft.refundAllocations ?? [] {
@@ -64,8 +69,47 @@ public enum RefundAccounting {
                     throw ExchangeError.invalid("Refund allocations exceed the original purchase. Adjust the links before changing its amount or treatment.")
                 }
                 used[purchase.id] = total
+                if let id = allocation.allocationID {
+                    guard let part = purchase.draft.components.first(where: { $0.id == id }) else { throw ExchangeError.invalid("Refund references a missing category allocation.") }
+                    let key = purchase.id.uuidString + id.uuidString
+                    components[key] = try addCents(components[key] ?? 0, allocation.amount.minorUnits)
+                    try requireFinance(components[key]! <= part.amount.minorUnits, "Refunds exceed the category allocation's gross amount.")
+                }
             }
         }
+    }
+
+    /// Exact full-width integer products and largest-remainder rounding. This is
+    /// a proposal only; callers must obtain explicit confirmation before saving.
+    public static func proportional(amount: Money, purchase: LedgerTransaction, records: [LedgerTransaction], excludingRefundID: UUID? = nil) throws -> [RefundAllocation] {
+        try validate(records: records)
+        try requireFinance(purchase.draft.treatment == .spending && purchase.draft.postingStatus == .posted && amount.minorUnits > 0
+            && amount.currency == purchase.draft.amount.currency, "Select an eligible posted purchase and positive refund amount.")
+        let parts = purchase.draft.components
+        var remaining = Dictionary(uniqueKeysWithValues: parts.map { ($0.id, $0.amount.minorUnits) })
+        for record in records where record.id != excludingRefundID {
+            for allocation in record.draft.refundAllocations ?? [] where allocation.purchaseID == purchase.id {
+                guard let id = allocation.allocationID ?? (purchase.draft.allocations.isEmpty ? TransactionDraft.primaryAllocationID : nil) else {
+                    throw ExchangeError.invalid("Resolve earlier refund category attribution before proposing another proportional allocation.")
+                }
+                remaining[id] = try addCents(remaining[id] ?? 0, -allocation.amount.minorUnits)
+            }
+        }
+        let total = try remaining.values.reduce(Int64(0)) { try addCents($0, $1) }
+        try requireFinance(total >= amount.minorUnits && total > 0, "Refund exceeds remaining refundable purchase value.")
+        var proposals: [(id: UUID, cents: Int64, remainder: UInt64)] = []
+        for part in parts {
+            let weight = remaining[part.id]!
+            if weight <= 0 { continue }
+            let product = UInt64(amount.minorUnits).multipliedFullWidth(by: UInt64(weight))
+            let division = UInt64(total).dividingFullWidth(product)
+            proposals.append((part.id, Int64(division.quotient), division.remainder))
+        }
+        proposals.sort { $0.remainder == $1.remainder ? $0.id.uuidString < $1.id.uuidString : $0.remainder > $1.remainder }
+        let allocated = try proposals.reduce(Int64(0)) { try addCents($0, $1.cents) }
+        let residual = Int(amount.minorUnits - allocated)
+        for index in 0..<residual { proposals[index].cents += 1 }
+        return proposals.filter { $0.cents > 0 }.map { .init(purchaseID: purchase.id, amount: Money(minorUnits: $0.cents), allocationID: purchase.draft.allocations.isEmpty ? nil : $0.id) }
     }
 }
 
@@ -79,6 +123,7 @@ public struct SummaryPurchase: Identifiable, Sendable {
     public let categoryID: String
     public let net: Money
     public let periodID: String
+    public var categoryAmounts: [String: Money] = [:]
 }
 
 public struct SummaryCategory: Identifiable, Sendable {
@@ -112,13 +157,17 @@ public struct SummaryReport: Sendable {
     public let periods: [SummaryPeriod]
     public let pending: Money
     public let total: Money
+    public let grossPurchases: Money
     public let unallocatedRefundIDs: [UUID]
     public let unallocatedRefundAmount: Money
+    public let receipts: Money
+    public let netCost: Money
+    public let limitations: [String]
 
     public init(records: [LedgerTransaction], catalog: ReviewCatalog,
                 from: TransactionDate? = nil, through: TransactionDate? = nil,
                 visibility: SummaryVisibility = .init(), showHidden: Bool = false,
-                excludedCategories: Set<String> = []) throws {
+                excludedCategories: Set<String> = [], workspace: ReviewWorkspace = .init()) throws {
         try RefundAccounting.validate(records: records)
         let available = records.filter { showHidden || !visibility.hides($0) }
         let spending = available.filter { $0.draft.treatment == .spending }
@@ -185,12 +234,15 @@ public struct SummaryReport: Sendable {
             guard !overflow else { throw ExchangeError.invalid("Summary exceeds the supported amount range.") }
             return result
         }
-        var deductions: [UUID: Int64] = [:], refundIDs: [UUID: [UUID]] = [:]
+        var deductions: [String: Int64] = [:], refundIDs: [UUID: [UUID]] = [:]
         var unallocated: [UUID] = [], unallocatedCents: Int64 = 0
         for refund in available where refund.draft.treatment == .refund && refund.draft.postingStatus == .posted {
             var allocated: Int64 = 0
             for link in refund.draft.refundAllocations ?? [] {
-                deductions[link.purchaseID] = try add(deductions[link.purchaseID] ?? 0, link.amount.minorUnits)
+                guard let purchase = records.first(where: { $0.id == link.purchaseID }),
+                      let component = link.allocationID ?? (purchase.draft.allocations.isEmpty ? TransactionDraft.primaryAllocationID : nil) else { continue }
+                let key = link.purchaseID.uuidString + component.uuidString
+                deductions[key] = try add(deductions[key] ?? 0, link.amount.minorUnits)
                 refundIDs[link.purchaseID, default: []].append(refund.id)
                 allocated = try add(allocated, link.amount.minorUnits)
             }
@@ -203,22 +255,30 @@ public struct SummaryReport: Sendable {
         }
         var rows: [SummaryPurchase] = [], categoryAmounts: [String: Int64] = [:]
         var groups: [String: [String: Int64]] = [:]
-        var pendingCents: Int64 = 0, totalCents: Int64 = 0
+        var pendingCents: Int64 = 0, totalCents: Int64 = 0, grossCents: Int64 = 0
         for purchase in spending {
             let value = purchase.draft
             let day = value.activityDate ?? value.date
-            let category = value.categoryID ?? ""
-            guard inRange(day), !excludedCategories.contains(category) else { continue }
-            if value.postingStatus == .pending { pendingCents = try add(pendingCents, value.amount.minorUnits); continue }
+            guard inRange(day) else { continue }
+            let parts = value.components.filter { !excludedCategories.contains($0.categoryID) }
+            if value.postingStatus == .pending { for part in parts { pendingCents = try add(pendingCents, part.amount.minorUnits) }; continue }
             guard value.postingStatus == .posted else { continue }
-            let net = value.amount.minorUnits - (deductions[purchase.id] ?? 0)
+            if !workspace.reporting.includePostedUnreviewed && purchase.approval != .confirmed { continue }
             let bucket = try period(day)
-            rows.append(SummaryPurchase(recordID: purchase.id, refundIDs: refundIDs[purchase.id] ?? [], date: day,
-                categoryID: category, net: Money(minorUnits: net), periodID: bucket))
-            categoryAmounts[category] = try add(categoryAmounts[category] ?? 0, net)
             var group = groups[bucket] ?? [:]
-            group[category] = try add(group[category] ?? 0, net); groups[bucket] = group
-            totalCents = try add(totalCents, net)
+            var net: Int64 = 0, portions: [String: Money] = [:]
+            for part in parts {
+                grossCents = try add(grossCents, part.amount.minorUnits)
+                let cents = part.amount.minorUnits - (deductions[purchase.id.uuidString + part.id.uuidString] ?? 0)
+                net = try add(net, cents)
+                categoryAmounts[part.categoryID] = try add(categoryAmounts[part.categoryID] ?? 0, cents)
+                group[part.categoryID] = try add(group[part.categoryID] ?? 0, cents)
+                portions[part.categoryID] = Money(minorUnits: try add(portions[part.categoryID]?.minorUnits ?? 0, cents))
+            }
+            groups[bucket] = group
+            var row = SummaryPurchase(recordID: purchase.id, refundIDs: refundIDs[purchase.id] ?? [], date: day,
+                categoryID: value.categoryID ?? "", net: Money(minorUnits: net), periodID: bucket)
+            row.categoryAmounts = portions; rows.append(row); totalCents = try add(totalCents, net)
         }
         purchases = rows.sorted { $0.date == $1.date ? $0.id.uuidString < $1.id.uuidString : $0.date > $1.date }
         categories = categoryAmounts.keys.sorted().map { key in
@@ -231,7 +291,29 @@ public struct SummaryReport: Sendable {
             }
         }
         pending = Money(minorUnits: pendingCents); total = Money(minorUnits: totalCents)
+        grossPurchases = Money(minorUnits: grossCents)
         unallocatedRefundIDs = unallocated.sorted { $0.uuidString < $1.uuidString }
         unallocatedRefundAmount = Money(minorUnits: unallocatedCents)
+        var receiptCents: Int64 = 0, repaid: Int64 = 0
+        for record in available where record.draft.treatment == .reimbursementReceipt && record.draft.postingStatus == .posted && inRange(record.draft.date) {
+            guard let magnitude = Int64(exactly: record.draft.amount.minorUnits.magnitude) else { throw MoneyError.outOfRange }
+            receiptCents = try add(receiptCents, magnitude)
+        }
+        let selected = Set(rows.map(\.recordID))
+        for allocation in workspace.repayments {
+            if let claim = workspace.claims.first(where: { $0.id == allocation.claimID }), selected.contains(claim.expenseID),
+               let expense = records.first(where: { $0.id == claim.expenseID }) {
+                if let component = allocation.expenseAllocationID.flatMap({ id in expense.draft.components.first { $0.id == id } }) {
+                    if !excludedCategories.contains(component.categoryID) { repaid = try add(repaid, allocation.amount.minorUnits) }
+                } else if excludedCategories.isDisjoint(with: expense.draft.components.map(\.categoryID)) {
+                    repaid = try add(repaid, allocation.amount.minorUnits)
+                }
+            }
+        }
+        receipts = Money(minorUnits: receiptCents); netCost = Money(minorUnits: try add(totalCents, -repaid))
+        limitations = workspace.reporting.coverage.filter { $0.status != .complete }.map { $0.source + ": " + $0.status.rawValue + ". " + $0.limitations }
+            + (workspace.reporting.coverage.isEmpty ? ["Source coverage has not been supplied. Empty periods are not verified zero spending."] : [])
+            + (workspace.historyImport != nil && workspace.refundImports.isEmpty ? ["Deferred refunds are not yet incorporated; purchases remain gross."] : [])
+            + (!excludedCategories.isEmpty && workspace.repayments.contains { $0.expenseAllocationID == nil } ? ["Unattributed repayments are excluded from category-filtered net cost when their purchase spans hidden categories. Assign a purchase component to attribute them."] : [])
     }
 }

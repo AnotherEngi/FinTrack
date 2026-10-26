@@ -112,7 +112,10 @@ struct TransactionListView: View {
         guard let range else { return [] }
         let labels = Dictionary(uniqueKeysWithValues: ledger.catalog.categories.map { ($0.id, $0.label) })
         let records = LedgerSelection(from: range.from, through: range.through,
-            search: search, categoryLabels: labels).records(in: ledger.records)
+            search: search, categoryLabels: labels,
+            subcategoryLabels: Dictionary(uniqueKeysWithValues: ledger.catalog.categories.map { category in
+                (category.id, Dictionary(uniqueKeysWithValues: category.subcategories.map { ($0.id, $0.label) }))
+            })).records(in: ledger.records)
         let questions = Set(ledger.discussions.values.filter { !$0.isResolved || $0.status == .draft }.map(\.recordID))
         return sort.records(records, catalog: ledger.catalog, changedIDs: ledger.sessionChanges.recordIDs, questionIDs: questions)
     }
@@ -382,8 +385,14 @@ private struct TransactionTableRow: View {
                     .accessibilityLabel(record.draft.source?.label ?? "Source unavailable")
             }
             TransactionTableCell(.category, tableWidth: width) {
-                if let categoryID = record.draft.categoryID {
-                    pill(catalog.category(id: categoryID)?.label ?? categoryID,
+                if !record.draft.allocations.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(record.draft.allocations) { part in
+                            pill(classificationLabel(part.categoryID, subcategoryID: part.subcategoryID) + " " + part.amount.decimalText, origin: part.origin)
+                        }
+                    }
+                } else if let categoryID = record.draft.categoryID {
+                    pill(classificationLabel(categoryID, subcategoryID: record.draft.primarySubcategoryID),
                         origin: record.classificationProvenance.category)
                 } else if record.draft.treatment.excludedFromReview {
                     Text("—").foregroundStyle(.secondary).accessibilityLabel("Category unavailable")
@@ -404,6 +413,12 @@ private struct TransactionTableRow: View {
         .accessibilityElement(children: .contain)
     }
 
+    private func classificationLabel(_ id: String, subcategoryID: String?) -> String {
+        let category = catalog.category(id: id)
+        let label = category?.label ?? id
+        guard let subcategoryID else { return label }
+        return label + " / " + (category?.subcategories.first { $0.id == subcategoryID }?.label ?? subcategoryID)
+    }
     private var date: some View {
         let parts = record.draft.date.iso8601.split(separator: "-").map { Int($0)! }
         var calendar = Calendar(identifier: .gregorian)

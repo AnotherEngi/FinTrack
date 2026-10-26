@@ -27,11 +27,12 @@ public struct LedgerSelection: Sendable {
     public var excludedTags: Set<String>
     public var excludeExceptionalEvents: Bool
     public var categoryLabels: [String: String]
+    public var subcategoryLabels: [String: [String: String]]
 
     public init(from: TransactionDate? = nil, through: TransactionDate? = nil,
                 search: String = "", reviewFilter: LedgerReviewFilter = .all,
                 excludedTags: Set<String> = [], excludeExceptionalEvents: Bool = false,
-                categoryLabels: [String: String] = [:]) {
+                categoryLabels: [String: String] = [:], subcategoryLabels: [String: [String: String]] = [:]) {
         self.from = from
         self.through = through
         self.search = search
@@ -39,6 +40,7 @@ public struct LedgerSelection: Sendable {
         self.excludedTags = excludedTags
         self.excludeExceptionalEvents = excludeExceptionalEvents
         self.categoryLabels = categoryLabels
+        self.subcategoryLabels = subcategoryLabels
     }
 
     public func records(in records: [LedgerTransaction]) -> [LedgerTransaction] {
@@ -47,12 +49,16 @@ public struct LedgerSelection: Sendable {
             guard from.map({ draft.date >= $0 }) ?? true,
                   through.map({ draft.date <= $0 }) ?? true,
                   reviewFilter.matches(record),
-                  !excludeExceptionalEvents || !draft.exceptionalEvent,
+                  !excludeExceptionalEvents || draft.exceptionalEvent != true,
                   excludedTags.isDisjoint(with: draft.tags) else { return false }
             let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
+            let classificationText = draft.components.flatMap { part -> [String] in
+                let subcategory = subcategoryLabels[part.categoryID]?[part.subcategoryID ?? ""] ?? part.subcategoryID ?? ""
+                return [categoryLabels[part.categoryID] ?? part.categoryID, subcategory]
+            }
             return query.isEmpty || ([draft.payee, draft.notes, draft.answer, draft.date.iso8601,
                 draft.source?.label ?? "", categoryLabels[draft.categoryID ?? ""] ?? draft.categoryID ?? "",
-                record.assistantContext.question] + draft.tags).contains {
+                record.assistantContext.question] + draft.tags + classificationText).contains {
                     $0.range(of: query, options: [.caseInsensitive, .diacriticInsensitive]) != nil
                 }
         }.sorted {

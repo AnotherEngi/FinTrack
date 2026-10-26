@@ -160,7 +160,7 @@ private func lifecycleRecord(_ note: String = "Fictional category question") thr
     #expect(try BackupArchive.read(from: file).records == [replacement])
 }
 
-@Test func newArchiveCanExceedFiftyMiBWhileOldJSONBackupsStillRead() throws {
+@Test func currentArchiveCanExceedFiftyMiBAndRetiredJSONBackupsAreRejected() throws {
     let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     defer { try? FileManager.default.removeItem(at: directory) }
@@ -174,7 +174,7 @@ private func lifecycleRecord(_ note: String = "Fictional category question") thr
     #expect(restored.records.count == 112 && restored.records.first?.draft.notes.count == 500_000)
     let legacy = directory.appendingPathComponent("legacy.json")
     try ExchangeJSON.encode(FullBackup(records: [lifecycleRecord()], workspace: .init())).write(to: legacy)
-    #expect(try BackupArchive.read(from: legacy).records.count == 1)
+    #expect(throws: (any Error).self) { try BackupArchive.read(from: legacy) }
 }
 
 @Test func capacityChecksFailBeforeAcceptingAnUnrecoverableState() throws {
@@ -183,14 +183,13 @@ private func lifecycleRecord(_ note: String = "Fictional category question") thr
     try BackupCapacity.validate(recordCount: 10, recordBytes: 10_000, workspace: .init())
 }
 
-@Test func legacyResolvedBoundaryCompactsWithoutReopeningAndPlainApprovalInventsNoDiscussion() throws {
+@Test func closedDiscussionCompactsWithoutReopeningAndPlainApprovalInventsNoDiscussion() throws {
     let record = try lifecycleRecord()
     let answer = DiscussionAnswer(recordID: record.id, expectedRevision: "1", text: "Synthetic old closed answer")
     var workspace = ReviewWorkspace()
     workspace.discussionAnswers = [answer]
-    workspace.resolvedDiscussions = [record.id.uuidString: DiscussionBoundary(record: record, answers: [answer], replies: [])]
+    workspace.closeDiscussion(for: record)
     try workspace.compactCompletedExchanges(records: [record])
-    #expect(workspace.resolvedDiscussions?.isEmpty == true)
     #expect(workspace.discussionAnswers?.isEmpty == true)
     #expect(workspace.discussion(for: record)?.isResolved == true)
     let plain = try LedgerTransaction(draft: TransactionDraft(date: TransactionDate("2026-03-01"), payee: "Fictional Plain Purchase",

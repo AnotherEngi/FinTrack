@@ -4,11 +4,11 @@ import FinTrackCore
 import FinTrackPersistence
 
 /// Permissions and progress only. Candidate bytes live in a bounded archive file,
-/// not a base64 copy inside this journal. candidateData reads old journals once.
+/// not a base64 copy inside this journal. retired journals are not converted.
 private struct BackupDiskState: Codable, Sendable {
+    var format = FinancialFormat.version
     var bookmark: Data?
     var progress = BackupProgress()
-    var candidateData: Data?
     var candidateFile: String?
     var candidateBytes: Int?
     var candidateDigest: String?
@@ -30,12 +30,6 @@ private actor CloudBackupFiles {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let url = directory.appendingPathComponent(version.fileName)
         try NativeBackupArchive.write(snapshot, to: url)
-        return try verify(url, generation: version.generation)
-    }
-    func migrate(_ data: Data, version: BackupVersion, directory: URL) throws -> (Int, String) {
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let url = directory.appendingPathComponent(version.fileName)
-        try data.write(to: url, options: .atomic)
         return try verify(url, generation: version.generation)
     }
     private nonisolated func verify(_ url: URL, generation: UUID) throws -> (Int, String) {
@@ -145,14 +139,13 @@ final class CloudBackup {
                 guard info.isRegularFile == true, let size = info.fileSize, size <= 80 * 1_024 * 1_024 else {
                     throw ExchangeError.invalid("The backup journal is oversized or unreadable.")
                 }
-                disk = try JSONDecoder().decode(BackupDiskState.self, from: Data(contentsOf: journalURL))
+                disk = try StrictJSON.decode(BackupDiskState.self, from: Data(contentsOf: journalURL))
+                guard disk.format == FinancialFormat.version else { throw ExchangeError.invalid("Unsupported backup connection format; select the folder again.") }
                 if let version = disk.progress.candidate {
-                    guard (version.archiveVersion == nil || version.archiveVersion == 2),
-                          (disk.candidateData != nil && disk.candidateFile == nil)
-                            || (disk.candidateData == nil && disk.candidateFile == version.fileName
-                                && disk.candidateBytes != nil && disk.candidateDigest != nil) else { throw ExchangeError.invalid("Inconsistent backup journal.") }
+                    guard version.archiveVersion == 2, disk.candidateFile == version.fileName,
+                          disk.candidateBytes != nil, disk.candidateDigest != nil else { throw ExchangeError.invalid("Inconsistent current backup journal.") }
                 } else {
-                    guard disk.candidateData == nil, disk.candidateFile == nil else { throw ExchangeError.invalid("Orphan candidate metadata.") }
+                    guard disk.candidateFile == nil else { throw ExchangeError.invalid("Orphan candidate metadata.") }
                 }
             } catch {
                 configurationFailure = "Backup settings could not be read. Select the iCloud folder again; the damaged journal will be preserved. \(error.localizedDescription)"
@@ -191,12 +184,6 @@ final class CloudBackup {
         do {
             failure = nil
             if query == nil { try startQuery(bookmark: bookmark) }
-            if let candidate = disk.progress.candidate, let data = disk.candidateData {
-                let info = try await files.migrate(data, version: candidate, directory: cacheURL)
-                let previous = disk
-                disk.candidateFile = candidate.fileName; disk.candidateBytes = info.0; disk.candidateDigest = info.1; disk.candidateData = nil
-                do { try persist() } catch { disk = previous; throw error }
-            }
             if disk.progress.candidate == nil && (archiveUpgradeNeeded || !disk.progress.isCurrent(generation: latest.workspace.generation)
                 || (query?.isGathering == false && !observedConfirmed)) {
                 var next = disk
@@ -267,7 +254,7 @@ final class CloudBackup {
             let previous = disk
             let old = disk.progress.confirm(id: candidate.id)
             disk.confirmedBytes = disk.candidateBytes; disk.confirmedDigest = disk.candidateDigest; disk.confirmedAt = .now
-            disk.candidateFile = nil; disk.candidateBytes = nil; disk.candidateDigest = nil; disk.candidateData = nil
+            disk.candidateFile = nil; disk.candidateBytes = nil; disk.candidateDigest = nil
             if let old {
                 if disk.cleanup == nil { disk.cleanup = [] }; disk.cleanup?.append(old)
             }

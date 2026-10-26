@@ -39,25 +39,6 @@ private func discussionRecord() throws -> LedgerTransaction {
     #expect(next.discussionContext?.first?.answers == [answer])
 }
 
-@Test func oldResponseExplanationsRemainReadableAndCanonicalReimportsRemainIdempotent() throws {
-    let record = try discussionRecord()
-    var workspace = ReviewWorkspace()
-    let packet = try workspace.prepare(records: [record], catalog: .prototype, mode: .pending)
-    let explanation = ClassificationProposal(recordID: record.id, expectedRevision: String(record.revision),
-        question: "Can you clarify the fictional purchase?", rationale: "Earlier-format discussion response")
-    let response = ReviewResponse(packetID: packet.manifest.id, knowledgeVersion: packet.manifest.knowledgeVersion, proposals: [explanation])
-    let data = try ExchangeJSON.encode(response)
-    let object = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
-    #expect(object["answers"] == nil)
-    try workspace.stage(data)
-    let restored = try ExchangeJSON.decode(ReviewWorkspace.self, from: ExchangeJSON.encode(workspace))
-    workspace = restored
-    try workspace.receive(data)
-    #expect(workspace.staged.count == 1)
-    #expect(!explanation.changesClassification(of: record))
-    #expect(workspace.discussion(for: record)?.answers.first?.text == explanation.rationale)
-}
-
 @Test func forgedDiscussionAnswerCannotAcknowledgeOrAttachToAnotherRecord() throws {
     let record = try discussionRecord()
     var workspace = ReviewWorkspace()
@@ -119,7 +100,7 @@ private func discussionRecord() throws -> LedgerTransaction {
     var object = try #require(JSONSerialization.jsonObject(with: ExchangeJSON.encode(workspace)) as? [String: Any])
     for key in ["discussionDrafts", "discussionReplies", "resolvedDiscussions", "discussionClosedRevisions"] { object.removeValue(forKey: key) }
     let older = try ExchangeJSON.decode(ReviewWorkspace.self, from: JSONSerialization.data(withJSONObject: object))
-    #expect(older.discussionDrafts == nil && older.resolvedDiscussions == nil)
+    #expect(older.discussionDrafts == nil)
 }
 
 private func chartRecord(_ date: String, _ cents: Int64, treatment: TransactionTreatment = .spending,

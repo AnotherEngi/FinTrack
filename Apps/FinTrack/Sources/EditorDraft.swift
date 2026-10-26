@@ -42,6 +42,7 @@ extension TransactionTreatment {
         case .spending: "Spending"
         case .refund: "Merchant refund"
         case .income: "Income"
+        case .reimbursementReceipt: "Reimbursement receipt"
         case .payment: "Payment"
         case .statementCredit: "Statement credit"
         case .transfer: "Transfer"
@@ -55,6 +56,7 @@ extension PostingStatus {
         switch self {
         case .posted: "Posted"
         case .pending: "Pending"
+        case .superseded: "Superseded"
         case .unresolved: "Needs posting review"
         }
     }
@@ -91,20 +93,6 @@ final class DraftStore {
     init(directory: URL, repository: LocalTransactionRepository) throws {
         self.repository = repository
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        if try !repository.workspace().legacyDraftsMigrated {
-            var migrated: [String: Data] = [:]
-            for url in try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
-                where url.pathExtension == "json" {
-                let data = try Data(contentsOf: url)
-                let draft = try JSONDecoder().decode(EditorDraft.self, from: data)
-                guard url.deletingPathExtension().lastPathComponent == draft.id.uuidString else {
-                    throw ExchangeError.invalid("A legacy draft filename does not match its record ID. Its file was preserved.")
-                }
-                migrated[draft.id.uuidString] = data
-            }
-            // Keep the original files as migration evidence; never re-read after migration.
-            try repository.migrateDrafts(migrated)
-        }
     }
 
     func write(_ draft: EditorDraft) throws {
@@ -118,7 +106,7 @@ final class DraftStore {
     }
 
     func fetchAll() throws -> [EditorDraft] {
-        return try repository.workspace().drafts.values.map { try JSONDecoder().decode(EditorDraft.self, from: $0) }
+        return try repository.workspace().drafts.values.map { try StrictJSON.decode(EditorDraft.self, from: $0) }
             .sorted { $0.createdAt < $1.createdAt }
     }
 }

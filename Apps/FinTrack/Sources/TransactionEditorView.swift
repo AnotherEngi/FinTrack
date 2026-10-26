@@ -16,6 +16,8 @@ struct TransactionEditorView: View {
     @State private var showDiscussion = false
     @State private var showRefundPurchases = false
     @State private var refundSearch = ""
+    @State private var refundProposal: [RefundAllocation] = []
+    @State private var showRefundProposal = false
     @State private var visibilityFailure: String?
     @FocusState private var noteFocused: Bool
 
@@ -60,6 +62,7 @@ struct TransactionEditorView: View {
                         Text("Posted").tag(PostingStatus.posted)
                         Text("Pending").tag(PostingStatus.pending)
                         Text("Needs posting review").tag(PostingStatus.unresolved)
+                        Text("Superseded").tag(PostingStatus.superseded)
                     }
                     Picker("Treatment", selection: $draft.input.treatment) {
                         ForEach(TransactionTreatment.allCases, id: \.self) { Text($0.label).tag($0) }
@@ -77,7 +80,11 @@ struct TransactionEditorView: View {
                         }
                     }
                     TextField("Tags (separate with semicolons)", text: $draft.input.tagsText)
-                    Toggle("Exceptional Event", isOn: $draft.input.exceptionalEvent)
+                    Picker("Exceptional event", selection: $draft.input.exceptionalEvent) {
+                        Text("Unknown").tag(Optional<Bool>.none)
+                        Text("Yes").tag(Optional(true)); Text("No").tag(Optional(false))
+                    }
+                    ExpenseSplitFields(input: $draft.input, catalog: ledger.catalog)
                     Text("Exceptional Events remain included in shown spending.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
@@ -136,20 +143,7 @@ struct TransactionEditorView: View {
                         }
                     }
                 }
-                if let legacy = draft.input.legacyReviewStatus {
-                    Section("Earlier Prototype Review") {
-                        Text("Preserved flag: \(legacy == .reviewed ? "Reviewed" : "Needs review"). Select posting status, treatment, and category before approving this classification.")
-                            .font(.callout).foregroundStyle(.secondary)
-                    }
-                }
-                if let fields = ledger.workspace.historyDetails?[draft.id.uuidString], !fields.isEmpty {
-                    Section("Preserved Sheet Details") {
-                        Text("Read-only source details. Preserved split, reimbursement or subcategory fields do not become supported calculations merely by being imported.").font(.caption).foregroundStyle(.secondary)
-                        ForEach(fields.keys.sorted(), id: \.self) { key in
-                            LabeledContent(key) { Text(fields[key] ?? "").textSelection(.enabled) }
-                        }
-                    }
-                }
+                if let record = currentRecord { SourceEvidenceFields(record: record) }
                 Section {
                     Text(status).font(.callout).accessibilityLabel("Save status: \(status)")
                     if needsRetry { Button("Retry Save") { saveChangedInput() } }
@@ -173,6 +167,20 @@ struct TransactionEditorView: View {
             } message: { Text(visibilityFailure ?? "") }
             .sheet(isPresented: $showDiscussion) { DiscussionDetailView(ledger: ledger, recordID: draft.id) }
             .sheet(isPresented: $showRefundPurchases) { refundPurchasePicker }
+            .confirmationDialog("Confirm the proposed category refund amounts?", isPresented: $showRefundProposal, titleVisibility: .visible) {
+                Button("Use Proposed Allocation") {
+                    let ids = Set(refundProposal.map(\.purchaseID))
+                    draft.input.refundAllocations?.removeAll { ids.contains($0.purchaseID) }
+                    if draft.input.refundAllocations == nil { draft.input.refundAllocations = [] }
+                    draft.input.refundAllocations?.append(contentsOf: refundProposal.map { .init(purchaseID: $0.purchaseID, allocationID: $0.allocationID, amountText: $0.amount.decimalText) })
+                }
+            } message: {
+                Text(refundProposal.map { part in
+                    let purchase = ledger.record(id: part.purchaseID)
+                    let category = purchase?.draft.components.first { $0.id == part.allocationID }?.categoryID
+                    return (ledger.catalog.category(id: category)?.label ?? "Primary category") + ": " + part.amount.decimalText
+                }.joined(separator: "\n"))
+            }
             .confirmationDialog("Discard unsaved input? Previously saved edits will remain.",
                                 isPresented: $discardConfirmation, titleVisibility: .visible) {
                 Button("Discard Unsaved Draft", role: .destructive) {
@@ -191,18 +199,33 @@ struct TransactionEditorView: View {
                 VStack(alignment: .leading) {
                     if let purchase = ledger.record(id: link.purchaseID) {
                         Text(purchase.draft.payee + " · " + (purchase.draft.activityDate ?? purchase.draft.date).iso8601)
+                        Picker("Category allocation", selection: Binding(get: { draft.input.refundAllocations?.first { $0.id == link.id }?.allocationID }, set: { id in
+                            if let index = draft.input.refundAllocations?.firstIndex(where: { $0.id == link.id }) { draft.input.refundAllocations?[index].allocationID = id }
+                        })) {
+                            Text("Unresolved attribution").tag(Optional<UUID>.none)
+                            ForEach(purchase.draft.components) { part in Text(ledger.catalog.category(id: part.categoryID)?.label ?? part.categoryID).tag(Optional(part.id)) }
+                        }
+                        if purchase.draft.components.count > 1 {
+                            Button("Propose Proportional Allocation") {
+                                do {
+                                    let amount = try Money(decimalText: link.amountText)
+                                    refundProposal = try RefundAccounting.proportional(amount: amount, purchase: purchase, records: ledger.records, excludingRefundID: draft.id)
+                                    showRefundProposal = true
+                                } catch { status = error.localizedDescription }
+                            }
+                        }
                     } else { Text("Missing purchase").foregroundStyle(.red) }
                     HStack {
                         TextField("Refund amount for this purchase", text: Binding(
-                            get: { draft.input.refundAllocations?.first { $0.purchaseID == link.purchaseID }?.amountText ?? "" },
+                            get: { draft.input.refundAllocations?.first { $0.id == link.id }?.amountText ?? "" },
                             set: { text in
-                                if let index = draft.input.refundAllocations?.firstIndex(where: { $0.purchaseID == link.purchaseID }) {
+                                if let index = draft.input.refundAllocations?.firstIndex(where: { $0.id == link.id }) {
                                     draft.input.refundAllocations?[index].amountText = text
                                 }
                             }))
                             .keyboardType(.decimalPad)
                         Button("Remove", role: .destructive) {
-                            draft.input.refundAllocations?.removeAll { $0.purchaseID == link.purchaseID }
+                            draft.input.refundAllocations?.removeAll { $0.id == link.id }
                         }.buttonStyle(.borderless)
                     }
                 }
@@ -271,7 +294,7 @@ struct TransactionEditorView: View {
         }
         do {
             let saved = try ledger.perform(request)
-            draft.expectedRevision = saved.revision
+            draft = EditorDraft(record: saved)
             pendingRequest = nil
             status = "Review action saved on this iPad."
             if [.approve, .discuss, .skip].contains(action) { onAdvance(draft.id) }
@@ -302,5 +325,77 @@ struct TransactionEditorView: View {
             status = "Draft saved on this iPad. \(error.localizedDescription)"
             return false
         }
+    }
+}
+
+private struct ExpenseSplitFields: View {
+    @Binding var input: TransactionInput
+    let catalog: ReviewCatalog
+    var body: some View {
+        Picker("Subcategory", selection: $input.primarySubcategoryID) {
+            Text("None / unknown").tag(Optional<String>.none)
+            ForEach(catalog.category(id: input.categoryID)?.subcategories ?? []) { sub in Text(sub.label).tag(Optional(sub.id)) }
+        }
+        .onChange(of: input.categoryID) { _, _ in
+            if catalog.category(id: input.categoryID)?.subcategories.contains(where: { $0.id == input.primarySubcategoryID }) != true { input.primarySubcategoryID = nil }
+        }
+        if input.treatment == .spending {
+            Text("Primary category receives the remainder. Add only known secondary dollar amounts.").font(.caption).foregroundStyle(.secondary)
+            ForEach($input.allocations) { $part in
+                if !part.isPrimary {
+                    VStack(alignment: .leading) {
+                        Picker("Secondary category", selection: $part.categoryID) {
+                            Text("Choose").tag("")
+                            ForEach(catalog.categories) { category in Text(category.label).tag(category.id) }
+                        }
+                        Picker("Subcategory", selection: $part.subcategoryID) {
+                            Text("None / unknown").tag(Optional<String>.none)
+                            ForEach(catalog.category(id: part.categoryID)?.subcategories ?? []) { sub in Text(sub.label).tag(Optional(sub.id)) }
+                        }
+                        .onChange(of: part.categoryID) { _, _ in part.subcategoryID = nil }
+                        TextField("Amount", text: $part.amountText).keyboardType(.decimalPad)
+                        Button("Remove Allocation", role: .destructive) { input.allocations.removeAll { $0.id == part.id } }
+                    }
+                }
+            }
+            if let value = try? input.value(), !value.allocations.isEmpty {
+                let primaryID = input.allocations.first { $0.isPrimary }?.id ?? TransactionDraft.primaryAllocationID
+                Text("Primary remainder: " + (value.allocations.first { $0.id == primaryID }?.amount.decimalText ?? "0.00"))
+            }
+            Button("Add Secondary Allocation", systemImage: "plus") { input.allocations.append(.init(categoryID: "", amountText: "")) }
+                .disabled(input.allocations.count >= 99)
+        }
+    }
+}
+
+private struct SourceEvidenceFields: View {
+    let record: LedgerTransaction
+    var body: some View {
+        Section("Source evidence") {
+            Text("Current question state: " + record.draft.questionState.rawValue)
+            if record.draft.sourceVersions.isEmpty { Text("No provider version evidence was supplied.").foregroundStyle(.secondary) }
+            ForEach(record.draft.sourceVersions) { version in
+                DisclosureGroup(version.date.iso8601 + " · " + version.lifecycle.rawValue + " · " + version.amount.decimalText) {
+                    Text(version.merchant)
+                    Text(version.identity.map { $0.sourceAlias + " / " + $0.transactionID } ?? "Provider ID unknown")
+                    Text("Original timestamp: " + (version.timestamp?.original ?? "Unknown"))
+                    ForEach(version.notes) { note in Text(note.ownership.rawValue + ": " + note.text).textSelection(.enabled) }
+                    ForEach(version.decisions) { decision in decisionRow(decision) }
+                }
+            }
+            ForEach(record.draft.historicalDecisions) { decision in decisionRow(decision) }
+            ForEach(record.draft.sourceNotes) { note in Text(note.ownership.rawValue + ": " + note.text).textSelection(.enabled) }
+            ForEach(record.draft.archivalFields.keys.sorted(), id: \.self) { key in
+                if let field = record.draft.archivalFields[key] { LabeledContent(key + " (" + field.ownership.rawValue + ")", value: field.value.display) }
+            }
+            LabeledContent("Source visibility", value: record.draft.reportedVisibility.display)
+        }
+    }
+    private func decisionRow(_ value: HistoricalDecision) -> some View {
+        VStack(alignment: .leading) {
+            Text(value.approved.map { $0 ? "Earlier approval" : "Earlier rejection" } ?? "Earlier decision unknown")
+            Text("Decision time: " + (value.decidedAt?.original ?? "Unknown") + "; observed: " + (value.observedAt?.original ?? "Unknown"))
+            Text(value.evidence).textSelection(.enabled)
+        }.font(.caption)
     }
 }

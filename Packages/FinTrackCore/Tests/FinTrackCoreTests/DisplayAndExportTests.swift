@@ -33,7 +33,7 @@ private func exportObject(_ export: ReviewExport) throws -> [String: Any] {
     #expect(!export.csv.contains("user_note"))
     #expect(!export.csv.contains("assistant_question"))
     #expect(object["purpose"] as? String == "fintrack-review-export")
-    #expect(object["schemaVersion"] as? Int == 1)
+    #expect(object["schemaVersion"] as? Int == FinancialFormat.version)
 }
 
 @Test func exportOptionsKeepUserAndAssistantOwnershipSeparate() throws {
@@ -144,7 +144,7 @@ private func exportObject(_ export: ReviewExport) throws -> [String: Any] {
     #expect(selected.map(\.id) == [ordinary.id])
     #expect(try LedgerOverview(records: selected, catalog: .prototype).totals.posted.minorUnits == 250)
     #expect(try LedgerOverview(records: records, catalog: .prototype).totals.posted.minorUnits == 3_250)
-    #expect(records[0].draft.exceptionalEvent)
+    #expect(records[0].draft.exceptionalEvent == true)
     #expect(records[0].draft.tags == ["Sample trip"])
 }
 

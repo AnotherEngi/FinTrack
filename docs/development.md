@@ -1,5 +1,36 @@
 # Development and verification
 
+## Current financial framework (2026-10-25)
+
+The framework now has one current domain/store schema and current version-2
+contracts per purpose. Prototype readers, schema migration chains, old draft
+conversion and base64 backup-journal conversion were removed. Incompatible data
+fails clearly and is not silently reset. Use the explicit separate-empty-ledger
+action for development. The new backup journal may require choosing the iCloud
+folder again. No Xcode signing/project file was modified in this batch.
+
+See [current validation and all remaining Mac/iPad checks](framework-validation.md),
+[contracts and tested synthetic examples](contracts/financial-framework.md),
+[current data inventory/retention](data-retention.md), and
+[the replacement ChatGPT migration request](chatgpt-history-migration.md).
+Real migration remains gated on native/device acceptance for this revision.
+Final Windows verification: **137 portable tests passed** (process exit 0),
+**19 native source/test files passed syntax parsing**, and `git diff --check`
+passed. **47 native test declarations** await Mac execution; no native typecheck,
+Xcode build or device/iCloud runtime check was performed here.
+
+The agent runs every available local check. Windows entry point:
+
+```powershell
+Set-Location 'C:\Users\rproi\source\repos\FinTrack'
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Test-Core.ps1
+```
+
+The Swift toolchain emits a `.build/debug` symbolic-link warning on this machine;
+the actual test process can still finish successfully with exit code 0. Judge the
+Swift Testing final test count, not the XCTest harness's separate zero-test line.
+All earlier batch descriptions/counts below are historical.
+
 Current framework work targets one current model, store schema and format per
 purpose. Earlier development migration/compatibility notes below describe the
 prototype; they are not preservation requirements for the rebuild. Follow the
@@ -265,4 +296,3 @@ has no direct Mac session. Earlier static checks
 covered PowerShell syntax, scheme XML, project reference paths, cloud-disabled
 configuration, and whitespace. Windows core-test success does not establish that
 the SwiftData package or iPad app compiles or runs.
-

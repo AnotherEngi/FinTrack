@@ -50,6 +50,18 @@ public struct Money: Codable, Equatable, Sendable {
     }
 
     public var decimalValue: Decimal { Decimal(minorUnits) / 100 }
+
+    private enum CodingKeys: String, CodingKey { case minorUnits, currency }
+    public init(from decoder: any Decoder) throws {
+        let value = try decoder.container(keyedBy: CodingKeys.self)
+        let text = try value.decode(String.self, forKey: .minorUnits)
+        guard let cents = Int64(text), String(cents) == text else { throw MoneyError.invalidAmount }
+        self.init(minorUnits: cents, currency: try value.decode(Currency.self, forKey: .currency))
+    }
+    public func encode(to encoder: any Encoder) throws {
+        var value = encoder.container(keyedBy: CodingKeys.self)
+        try value.encode(String(minorUnits), forKey: .minorUnits); try value.encode(currency, forKey: .currency)
+    }
 }
 
 public enum MoneyError: Error, Equatable, LocalizedError {

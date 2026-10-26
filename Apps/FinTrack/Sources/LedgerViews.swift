@@ -1,5 +1,277 @@
 import SwiftUI
+import Observation
 import FinTrackCore
+
+@MainActor
+struct FinancialSettingsView: View {
+    var ledger: LedgerViewModel
+    @Environment(\.dismiss) private var dismiss
+    @State private var context: FinancialContext
+    @State private var categories: [ReviewCategory]
+    @State private var failure: String?
+    @State private var inputState = FinancialInputState()
+    init(ledger: LedgerViewModel) {
+        self.ledger = ledger
+        _context = State(initialValue: FinancialContext(workspace: ledger.workspace))
+        _categories = State(initialValue: ledger.catalog.categories)
+    }
+    var body: some View {
+        NavigationStack {
+            Form {
+                categorySection
+                accountSection
+                programSection
+                reimbursementSection
+                reportingSection
+                if let failure { Section { Text(failure).foregroundStyle(.red).textSelection(.enabled) } }
+            }
+            .navigationTitle("Financial Settings").navigationBarTitleDisplayMode(.inline)
+            .environment(inputState)
+            .onChange(of: financialObjectIDs) { _, ids in inputState.prune(keeping: ids) }
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        do { try ledger.saveFinancialSettings(context, categories: categories); dismiss() }
+                        catch { failure = error.localizedDescription }
+                    }.disabled(!inputState.errors.isEmpty)
+                }
+            }
+        }
+    }
+    private var categorySection: some View {
+                Section("Categories and subcategories") {
+                    ForEach($categories) { $category in
+                        DisclosureGroup(category.label) {
+                            Text("Stable ID: " + category.id).font(.caption).textSelection(.enabled)
+                            TextField("Display label", text: $category.label)
+                            TextField("Stored source label", text: $category.storedLabel)
+                            SourceValueField(title: "Definition", value: $category.definition)
+                            Toggle("Unresolved", isOn: $category.unresolved)
+                            Toggle("Excluded", isOn: $category.excluded)
+                            ForEach($category.subcategories) { $sub in
+                                DisclosureGroup(sub.label) {
+                                    TextField("Display label", text: $sub.label)
+                                    TextField("Stored source label", text: $sub.storedLabel)
+                                    SourceValueField(title: "Definition", value: $sub.definition)
+                                    Toggle("Unresolved", isOn: $sub.unresolved)
+                                    Toggle("Excluded", isOn: $sub.excluded)
+                                    Button("Remove Subcategory", role: .destructive) { category.subcategories.removeAll { $0.id == sub.id } }
+                                }
+                            }
+                            Button("Add Subcategory") { category.subcategories.append(.init(id: UUID().uuidString, label: "New subcategory", origin: .user)) }
+                            Button("Remove Category", role: .destructive) { categories.removeAll { $0.id == category.id } }
+                        }
+                    }
+                    Button("Add Category") { categories.append(.init(id: UUID().uuidString, label: "New category", origin: .user)) }
+                    Text("Referenced categories cannot be removed. Unused definitions remain available and are included in backups.").font(.caption)
+                }
+    }
+    private var accountSection: some View {
+                Section("Accounts") {
+                    ForEach($context.accounts) { $account in
+                        DisclosureGroup(account.alias) {
+                            TextField("Alias", text: $account.alias)
+                            SourceValueField(title: "Provider", value: $account.provider)
+                            SourceValueField(title: "Provider account identity", value: $account.providerAccountID)
+                            Button("Remove Account", role: .destructive) { context.accounts.removeAll { $0.id == account.id } }
+                        }
+                    }
+                    Button("Add Account") { context.accounts.append(.init(alias: "New account")) }
+                }
+    }
+    private var programSection: some View {
+                Section("Benefit programs") {
+                    ForEach($context.programs) { $program in
+                        DisclosureGroup(program.label) {
+                            BenefitProgramFields(program: $program)
+                            Button("Remove Program", role: .destructive) { context.programs.removeAll { $0.id == program.id } }
+                        }
+                    }
+                    Button("Add Program") { context.programs.append(.init(label: "New program")) }
+                }
+    }
+    private var reimbursementSection: some View {
+                Section("Reimbursements") {
+                    Text("Expected amounts do not reduce spending. Only actual receipts assigned to a claim reduce purchase net cost. Unknown amounts and settings remain unknown.").font(.caption)
+                    ForEach($context.claims) { $claim in
+                        DisclosureGroup(ledger.record(id: claim.expenseID)?.draft.payee ?? "Choose purchase") {
+                            ClaimFields(claim: $claim, records: ledger.records, programs: context.programs)
+                            if let received = try? FinancialAccounting.received(claimID: claim.id, workspace: reimbursementWorkspace) {
+                                LabeledContent("Assigned actual receipts", value: received.decimalText)
+                            }
+                            if let expected = claim.expected {
+                                Text("Expected " + expected.decimalText + "; received and outstanding use assigned receipt records.").font(.caption)
+                            }
+                            if let outstanding = try? FinancialAccounting.outstanding(claim: claim, workspace: reimbursementWorkspace) {
+                                LabeledContent("Outstanding", value: outstanding.decimalText)
+                            } else { Text("Outstanding unknown until an expected amount is supplied.").font(.caption) }
+                            Button("Remove Claim", role: .destructive) { context.claims.removeAll { $0.id == claim.id } }
+                        }
+                    }
+                    Button("Add Claim") {
+                        if let purchase = ledger.records.first(where: { $0.draft.treatment == .spending }) { context.claims.append(.init(expenseID: purchase.id)) }
+                    }.disabled(!ledger.records.contains { $0.draft.treatment == .spending })
+                    ForEach($context.repayments) { $part in
+                        DisclosureGroup("Actual repayment " + part.amount.decimalText) {
+                            RepaymentFields(part: $part, claims: context.claims, records: ledger.records)
+                            Button("Remove Repayment Link", role: .destructive) { context.repayments.removeAll { $0.id == part.id } }
+                        }
+                    }
+                    Button("Link Actual Repayment") {
+                        if let claim = context.claims.first, let receipt = ledger.records.first(where: { $0.draft.treatment == .reimbursementReceipt && $0.draft.postingStatus == .posted }) {
+                            context.repayments.append(.init(receiptID: receipt.id, claimID: claim.id, amount: Money(minorUnits: 0)))
+                        }
+                    }.disabled(context.claims.isEmpty || !ledger.records.contains { $0.draft.treatment == .reimbursementReceipt && $0.draft.postingStatus == .posted })
+                }
+    }
+    private var reportingSection: some View {
+                Section("Reporting") {
+                    Text("America/New_York · Monday weeks · calendar-month presets")
+                    Toggle("Include posted unapproved purchases", isOn: $context.reporting.includePostedUnreviewed)
+                    Text("Source coverage, source comparison controls and typed payment/duplicate relationships are available in Advanced Financial Settings.").font(.caption)
+                    NavigationLink("Advanced Financial Settings") {
+                        FinancialJSONEditor(context: $context)
+                    }
+                }
+    }
+    private var reimbursementWorkspace: ReviewWorkspace {
+        var value = ledger.workspace; value.claims = context.claims; value.repayments = context.repayments; return value
+    }
+    private var financialObjectIDs: [UUID] { context.programs.map(\.id) + context.claims.map(\.id) + context.repayments.map(\.id) }
+}
+
+private struct SourceValueField: View {
+    let title: String
+    @Binding var value: SourceValue
+    var body: some View {
+        Picker(title, selection: $value.kind) {
+            Text("Unknown").tag(SourceValue.Kind.unknown); Text("Absent").tag(SourceValue.Kind.absent)
+            Text("Null").tag(SourceValue.Kind.null); Text("Text").tag(SourceValue.Kind.text)
+            Text("Number").tag(SourceValue.Kind.number); Text("Boolean").tag(SourceValue.Kind.boolean)
+        }.onChange(of: value.kind) { _, kind in
+            value.text = [.text, .number].contains(kind) ? "" : nil
+            value.boolean = kind == .boolean ? false : nil
+        }
+        if [.text, .number].contains(value.kind) {
+            TextField(title + " value", text: Binding(get: { value.text ?? "" }, set: { value.text = $0 }))
+        } else if value.kind == .boolean {
+            Toggle(title + " value", isOn: Binding(get: { value.boolean ?? false }, set: { value.boolean = $0 }))
+        }
+    }
+}
+
+private struct OptionalMoneyField: View {
+    let title: String
+    let id: String
+    var required = false
+    @Binding var value: Money?
+    @Environment(FinancialInputState.self) private var inputs
+    private var text: String { inputs.text[id] ?? value?.decimalText ?? "" }
+    var body: some View {
+        TextField(title + (required ? "" : " (blank = unknown)"), text: Binding(get: { text }, set: { input in
+            inputs.text[id] = input
+            if input.isEmpty && !required { value = nil; inputs.errors.remove(id) }
+            else if let parsed = try? Money(decimalText: input) { value = parsed; inputs.errors.remove(id) }
+            else { inputs.errors.insert(id) }
+        })).keyboardType(.decimalPad)
+        if inputs.errors.contains(id) { Text("Enter a complete amount before saving.").foregroundStyle(.red) }
+    }
+}
+
+private struct BenefitProgramFields: View {
+    @Binding var program: BenefitProgram
+    var body: some View {
+        TextField("Program", text: $program.label)
+        OptionalMoneyField(title: "Limit", id: program.id.uuidString + ":limit", value: $program.limit)
+        Picker("Period", selection: $program.period.basis) { ForEach(BenefitPeriod.Basis.allCases, id: \.self) { Text($0.rawValue).tag($0) } }
+        SourceDateField(title: "Period start", id: program.id.uuidString + ":start", value: $program.period.from)
+        SourceDateField(title: "Period end", id: program.id.uuidString + ":end", value: $program.period.through)
+        SourceValueField(title: "Eligibility rules", value: $program.eligibilityRules)
+        Text("Unspecified limits, eligibility and reset rules are not inferred.").font(.caption)
+    }
+}
+private struct SourceDateField: View {
+    let title: String
+    let id: String
+    @Binding var value: TransactionDate?
+    @Environment(FinancialInputState.self) private var inputs
+    private var text: String { inputs.text[id] ?? value?.iso8601 ?? "" }
+    var body: some View {
+        TextField(title + " (YYYY-MM-DD; blank = unknown)", text: Binding(get: { text }, set: { input in
+            inputs.text[id] = input
+            if input.isEmpty { value = nil; inputs.errors.remove(id) }
+            else if let parsed = try? TransactionDate(input) { value = parsed; inputs.errors.remove(id) }
+            else { inputs.errors.insert(id) }
+        }))
+        if inputs.errors.contains(id) { Text("Enter a complete date before saving.").foregroundStyle(.red) }
+    }
+}
+@MainActor @Observable private final class FinancialInputState {
+    var text: [String: String] = [:]
+    var errors: Set<String> = []
+    func prune(keeping ids: [UUID]) {
+        let prefixes = Set(ids.map(\.uuidString))
+        text = text.filter { prefixes.contains(String($0.key.prefix(36))) }
+        errors = errors.filter { prefixes.contains(String($0.prefix(36))) }
+    }
+}
+private struct ClaimFields: View {
+    @Binding var claim: ReimbursementClaim
+    let records: [LedgerTransaction]
+    let programs: [BenefitProgram]
+    var body: some View {
+        Picker("Purchase", selection: $claim.expenseID) { ForEach(records.filter { $0.draft.treatment == .spending }) { Text($0.draft.payee + " · " + $0.draft.date.iso8601).tag($0.id) } }
+        Picker("Program", selection: $claim.programID) {
+            Text("Unknown / none").tag(Optional<UUID>.none)
+            ForEach(programs) { Text($0.label).tag(Optional($0.id)) }
+        }
+        Picker("Eligibility", selection: $claim.eligibility) { ForEach(ReimbursementEligibility.allCases, id: \.self) { Text($0.rawValue).tag($0) } }
+        Picker("Status", selection: $claim.status) { ForEach(ClaimStatus.allCases, id: \.self) { Text($0.rawValue).tag($0) } }
+        OptionalMoneyField(title: "Expected", id: claim.id.uuidString + ":expected", value: $claim.expected)
+        OptionalMoneyField(title: "Source-reported received (unverified)", id: claim.id.uuidString + ":reported", value: $claim.sourceReportedReceived)
+        TextField("Claim notes", text: $claim.notes, axis: .vertical)
+    }
+}
+private struct RepaymentFields: View {
+    @Binding var part: RepaymentAllocation
+    let claims: [ReimbursementClaim]
+    let records: [LedgerTransaction]
+    var body: some View {
+        Picker("Actual receipt", selection: $part.receiptID) { ForEach(records.filter { $0.draft.treatment == .reimbursementReceipt && $0.draft.postingStatus == .posted }) { Text($0.draft.payee + " · " + $0.draft.amount.decimalText).tag($0.id) } }
+        Picker("Claim", selection: $part.claimID) { ForEach(claims) { claim in Text(records.first { $0.id == claim.expenseID }?.draft.payee ?? claim.id.uuidString).tag(claim.id) } }
+        Picker("Purchase allocation", selection: $part.expenseAllocationID) {
+            Text("Whole purchase / unattributed").tag(Optional<UUID>.none)
+            if let claim = claims.first(where: { $0.id == part.claimID }), let expense = records.first(where: { $0.id == claim.expenseID }) {
+                ForEach(expense.draft.components) { component in Text(component.categoryID + " · " + component.amount.decimalText).tag(Optional(component.id)) }
+            }
+        }
+        OptionalMoneyField(title: "Assigned receipt amount", id: part.id.uuidString + ":amount", required: true, value: Binding(get: { part.amount }, set: { if let value = $0 { part.amount = value } }))
+    }
+}
+private struct FinancialJSONEditor: View {
+    @Binding var context: FinancialContext
+    @State private var text = ""
+    @State private var failure: String?
+    @Environment(\.dismiss) private var dismiss
+    var body: some View {
+        VStack {
+            Text("Edit the supplied typed financial settings. Unknown fields, broken references and invalid controls are rejected on Save. Source baselines, migration audit and refund receipts are read-only.").font(.caption)
+            TextEditor(text: $text).font(.system(.caption, design: .monospaced)).autocorrectionDisabled()
+            if let failure { Text(failure).foregroundStyle(.red) }
+            Button("Use Settings Draft") {
+                do {
+                    var value = try StrictJSON.decode(FinancialContext.self, from: Data(text.utf8))
+                    value.migrationAudit = context.migrationAudit; value.refundReceipts = context.refundReceipts
+                    value.sourceBaselines = context.sourceBaselines
+                    context = value; dismiss()
+                } catch { failure = error.localizedDescription }
+            }
+        }.padding().onAppear {
+            do { text = String(decoding: try ExchangeJSON.encode(context), as: UTF8.self) } catch { failure = error.localizedDescription }
+        }
+    }
+}
 
 @MainActor
 struct FinTrackRootView: View {
@@ -151,7 +423,7 @@ struct LedgerRecordRow: View {
                 if !record.draft.tags.isEmpty {
                     Text(record.draft.tags.joined(separator: " · ")).font(.caption).foregroundStyle(.secondary)
                 }
-                if record.draft.exceptionalEvent {
+                if record.draft.exceptionalEvent == true {
                     Label("Exceptional Event", systemImage: "flag").font(.caption).foregroundStyle(.secondary)
                 }
             }
